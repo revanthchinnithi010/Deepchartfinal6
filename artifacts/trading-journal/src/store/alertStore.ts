@@ -8,13 +8,18 @@ import type {
 } from "@/data/alertsData";
 
 const LS_KEY = "tj_global_alerts_v1";
+let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
+
+function isPersistedAlertId(id: string): boolean {
+  return /^(p_|z_|t_|tl_)/.test(id);
+}
 
 function loadLocal(): AnyAlert[] {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as AnyAlert[];
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) return parsed.filter(a => isPersistedAlertId(String(a?.id ?? "")));
     }
   } catch {
     // Ignore corrupt local state.
@@ -123,9 +128,7 @@ function endpointForId(id: string): string {
   if (id.startsWith("z_")) return "/api/zones";
   if (id.startsWith("t_") || id.startsWith("tl_")) return "/api/trendlines";
   if (id.startsWith("p_")) return "/api/alerts";
-  // Legacy IDs created by the old DrawingAlertModal.
   if (id.startsWith("tl-")) return "/api/trendlines";
-  // Old mock-only IDs have no DB row; do not send a bogus DELETE.
   return "";
 }
 
@@ -148,30 +151,45 @@ interface AlertStore {
 }
 
 export const useAlertStore = create<AlertStore>((set, get) => ({
-  // Local data is only a temporary paint. hydrateFromApi() immediately replaces
-  // it with the real DB state, so Charts and Alerts never depend on mock data.
+  // Only persisted DB IDs are allowed into the production store. This prevents
+  // a failed POST from making a client-only alert look successfully created.
   alerts: typeof window !== "undefined" ? loadLocal() : [],
   isHydrating: false,
 
   addAlert: (alert) => set((state) => {
+    if (!isPersistedAlertId(alert.id)) {
+      // The create modals use temporary pa*/za*/ta* IDs. Those IDs are only
+      // valid before a successful POST; never persist them in production UI.
+      return state;
+    }
     const next = [alert, ...state.alerts.filter(a => a.id !== alert.id)];
     saveLocal(next);
     return { alerts: next };
   }),
 
-  updateAlert: (id, patch) => set((state) => {
-    const next = state.alerts.map(a =>
-      a.id === id ? ({ ...a, ...patch } as AnyAlert) : a
-    );
-    saveLocal(next);
-    return { alerts: next };
-  }),
+  updateAlert: (id, patch) => {
+    set((state) => {
+      const next = state.alerts.map(a =>
+        a.id === id ? ({ ...a, ...patch } as AnyAlert) : a
+      );
+      saveLocal(next);
+      return { alerts: next };
+    });
+
+    // The Alerts page performs the authoritative PATCH. Re-read the DB shortly
+    // afterwards so a failed PATCH cannot leave a false paused/active state in
+    // the UI. The DB is always the source of truth.
+    if (reconcileTimer) clearTimeout(reconcileTimer);
+    reconcileTimer = setTimeout(() => {
+      void useAlertStore.getState().hydrateFromApi();
+      reconcileTimer = null;
+    }, 700);
+  },
 
   deleteAlert: async (id) => {
     const endpoint = endpointForId(id);
     const previous = get().alerts;
 
-    // Optimistic removal keeps the UI instant, but the DB remains authoritative.
     set((state) => {
       const next = state.alerts.filter(a => a.id !== id);
       saveLocal(next);
@@ -184,22 +202,21 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
       const response = await fetch(`${endpoint}/${numericId(id)}`, { method: "DELETE" });
       if (!response.ok && response.status !== 204) throw new Error(`DELETE failed (${response.status})`);
     } catch {
-      // Never leave the UI claiming an alert was deleted when the DB delete failed.
       saveLocal(previous);
       set({ alerts: previous });
     }
   },
 
   setAlerts: (alerts) => {
-    saveLocal(alerts);
-    set({ alerts });
+    const persisted = alerts.filter(a => isPersistedAlertId(a.id));
+    saveLocal(persisted);
+    set({ alerts: persisted });
   },
 
   hydrateFromApi: async () => {
     set({ isHydrating: true });
     try {
       const alerts = await fetchDbAlerts();
-      // IMPORTANT: even an empty DB result is valid and must clear stale localStorage.
       saveLocal(alerts);
       set({ alerts });
     } catch {
@@ -210,8 +227,6 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
   },
 }));
 
-// Hydrate once globally. This fixes the Charts/Alert Center path, which used to
-// open with stale localStorage while the Alerts page separately fetched the DB.
 if (typeof window !== "undefined") {
   queueMicrotask(() => {
     void useAlertStore.getState().hydrateFromApi();
