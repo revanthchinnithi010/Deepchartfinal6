@@ -96,8 +96,9 @@ export class AlertEngine {
   // returns from the broken side into the zone/boundary.
   private zoneRetestBreakSide: Map<number, TrendlineSide> = new Map();
 
-  // Consecutive-tick counter for trendline touch alerts (require ≥2 ticks inside tolerance)
-  private touchCounts: Map<number, number> = new Map();
+  // Previous price/line sample used by trendline touch detection. A touch is
+  // a real contact/crossing of the line, not merely being a few pips away.
+  private trendlineTouchSamples: Map<number, { price: number; projected: number }> = new Map();
   // Tracks side at which a trendline breakout occurred (for retest).
   private retestBreakouts: Map<number, TrendlineSide> = new Map();
   private retestMovedAway: Set<number> = new Set();
@@ -262,6 +263,9 @@ export class AlertEngine {
       }
       for (const id of this.rejectionTouchedSide.keys()) {
         if (!incomingIds.has(id)) this.rejectionTouchedSide.delete(id);
+      }
+      for (const id of this.trendlineTouchSamples.keys()) {
+        if (!incomingIds.has(id)) this.trendlineTouchSamples.delete(id);
       }
       for (const t of trendlineRows) {
         if (t.isTriggered && t.condition !== "atr_proximity") continue; // atr_proximity is never permanently triggered
@@ -777,8 +781,11 @@ export class AlertEngine {
       let shouldFire = false;
 
       if (lastSide === undefined) {
-        // Seed side/touch state only. A newly-created alert must not instantly
-        // fire merely because the current price is already at its line.
+        // Seed state only. A newly-created alert must not instantly fire merely
+        // because the current price is already at/near its line. We DO save the
+        // first price/line sample so a genuine crossing on the next tick can be
+        // detected.
+        this.trendlineTouchSamples.set(id, { price, projected });
         if (cond === "atr_proximity") {
           const atr = this.atrCalculator.getAtr(tl.symbol, tl.timeframe, tl.atrPeriod);
           if (atr !== null) this.atrProximityInZone.set(id, Math.abs(price - projected) <= atr * tl.atrMultiplier);
@@ -814,10 +821,10 @@ export class AlertEngine {
         shouldFire = currentSide === "below" && lastSide === "above";
 
       } else if (cond === "touch" || cond === "touch_price") {
-        const count = inTouchBand ? (this.touchCounts.get(id) ?? 0) + 1 : 0;
-        this.touchCounts.set(id, count);
-        shouldFire = count >= 2;
-        if (!inTouchBand) this.touchCounts.delete(id);
+        // IMPORTANT: do not use a percentage proximity band here. A 0.02% band
+        // is several pips on EURUSD and caused visible false touches.
+        // Require an actual contact or a side-crossing between consecutive ticks.
+        shouldFire = this.isTrendlineTouch(id, tl.symbol, price, projected);
 
       } else if (cond === "above_price") {
         shouldFire = currentSide === "above" && lastSide === "below";
@@ -860,8 +867,13 @@ export class AlertEngine {
         }
       }
 
+      // Store the current world-price/line sample only after the condition has
+      // been evaluated. This makes the next tick capable of detecting a real
+      // crossing without turning the current tick into an automatic touch.
+      this.trendlineTouchSamples.set(id, { price, projected });
+
       if (shouldFire) {
-        this.touchCounts.delete(id);
+        this.trendlineTouchSamples.delete(id);
         if (cond === "atr_proximity") {
           // ATR proximity is a repeatable proximity alert. Keep it active and
           // let the in-zone state reset when price leaves the ATR band.
@@ -872,6 +884,58 @@ export class AlertEngine {
         }
       }
     }
+  }
+
+  /**
+   * Return a very small, instrument-aware tolerance for a genuine line touch.
+   *
+   * The previous implementation used 0.02% of price. On EURUSD that is about
+   * 3.2 pips, so a price could be visibly below the trendline and still trigger
+   * a "touch" alert. That is exactly the false-positive seen in the screenshot.
+   *
+   * We instead use a sub-pip tolerance for FX and a small absolute tolerance for
+   * crypto/other symbols. A crossing between two ticks is also considered a
+   * touch, so sparse ticks do not make the alert unreliable.
+   */
+  private trendlineTouchTolerance(symbol: string, price: number): number {
+    const s = symbol.toUpperCase().replace(/\.(pro|raw|ecn|std)$/i, "");
+
+    // JPY pairs normally quote to 3 decimals; use 0.1 pip.
+    if (/JPY$/.test(s)) return 0.0001;
+
+    // Standard 5-decimal FX pairs: 0.1 pip.
+    if (/^[A-Z]{6}$/.test(s)) return 0.00001;
+
+    // Crypto/other instruments: 0.001% is still deliberately tight.
+    // Cap it so high-priced assets cannot get a multi-dollar false band.
+    return Math.max(0.0001, Math.min(Math.abs(price) * 0.00001, 0.10));
+  }
+
+  private isTrendlineTouch(
+    id: number,
+    symbol: string,
+    price: number,
+    projected: number,
+  ): boolean {
+    const tolerance = this.trendlineTouchTolerance(symbol, price);
+    const distance = Math.abs(price - projected);
+
+    // Direct contact within a tiny instrument-aware tolerance.
+    if (distance <= tolerance) return true;
+
+    // If the line was crossed between two received ticks, the exact tick at the
+    // intersection may not have been delivered. Treat the crossing as a touch.
+    const previous = this.trendlineTouchSamples.get(id);
+    if (!previous) return false;
+
+    const previousDelta = previous.price - previous.projected;
+    const currentDelta = price - projected;
+
+    return (
+      previousDelta !== 0 &&
+      currentDelta !== 0 &&
+      Math.sign(previousDelta) !== Math.sign(currentDelta)
+    );
   }
 
   private calcTrendlinePrice(tl: TrendlineRow, nowMs: number): number | null {
