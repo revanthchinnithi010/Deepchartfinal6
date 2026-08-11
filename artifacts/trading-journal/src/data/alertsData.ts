@@ -57,6 +57,8 @@ export interface TrendlineAlert {
   atrPeriod?: number;
   /** ATR multiplier for zone buffer size (default 0.15) */
   atrMultiplier?: number;
+  /** Chart drawing display ID (e.g. TL-004) this alert belongs to. */
+  drawingDisplayId?: string;
   notes: string;
   status: AlertStatus;
   createdAt: string;
