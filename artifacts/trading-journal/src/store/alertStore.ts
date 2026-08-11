@@ -88,6 +88,7 @@ function apiTrendlineToTrendlineAlert(t: Record<string, unknown>): TrendlineAler
     condition: (t.condition as TrendlineAlert["condition"]) ?? "break",
     atrPeriod: Number(t.atrPeriod ?? 14),
     atrMultiplier: Number(t.atrMultiplier ?? 0.15),
+    drawingDisplayId: typeof t.drawingDisplayId === "string" ? t.drawingDisplayId : undefined,
     notes: String(t.notes ?? ""),
     status: t.isTriggered ? "triggered" : t.isActive ? "active" : "paused",
     createdAt: String(t.createdAt ?? new Date().toISOString()),
