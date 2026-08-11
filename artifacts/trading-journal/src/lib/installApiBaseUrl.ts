@@ -1,21 +1,19 @@
 // Installs a thin `window.fetch` interceptor for every relative `/api/*`
 // request, handling two concerns:
 //
-// 1. Auth header injection (always on, regardless of deployment shape):
-//    attaches `Authorization: Bearer <token>` from the token issued by
-//    POST /api/auth/verify-pin. This replaced a cookie/session-based
-//    approach — mobile Chrome blocks third-party/cross-site cookies
-//    (SameSite=None) by default whenever the frontend and backend live on
-//    two different Railway domains. A bearer token in a normal header has
-//    no such cross-site cookie policy to run into.
+// 1. Auth header injection: attaches the PIN bearer token to REST requests.
+// 2. Base URL rewriting: prepends `VITE_API_BASE_URL` to relative `/api/*`
+//    requests when frontend and backend are separate services.
 //
-// 2. Base URL rewriting (opt-in via `VITE_API_BASE_URL`): prepends the
-//    backend's public origin to every relative `/api/*` request, when the
-//    frontend and backend are deployed as two separate Railway services.
+// It also wraps the browser WebSocket constructor once so the same signed PIN
+// token is attached to `/api/ws` upgrades. Browsers do not allow arbitrary
+// Authorization headers in `new WebSocket()`, so the backend validates the
+// token from the handshake query string.
 
 import { getStoredAuthToken } from "./authToken";
 
 let installed = false;
+let websocketPatched = false;
 
 function resolvePath(input: RequestInfo | URL): string | null {
   try {
@@ -39,6 +37,36 @@ function withAuthHeader(input: RequestInfo | URL, init: RequestInit | undefined)
   return { ...init, headers };
 }
 
+function installWebSocketAuth(): void {
+  if (websocketPatched || typeof window === "undefined" || typeof window.WebSocket === "undefined") return;
+  websocketPatched = true;
+
+  const NativeWebSocket = window.WebSocket;
+
+  class AuthenticatedWebSocket extends NativeWebSocket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      let nextUrl = url;
+      const token = getStoredAuthToken();
+
+      if (token) {
+        try {
+          const parsed = new URL(String(url), window.location.href);
+          if (parsed.pathname === "/api/ws" || parsed.pathname === "/ws") {
+            parsed.searchParams.set("token", token);
+            nextUrl = parsed.toString();
+          }
+        } catch {
+          // Fall back to the original URL; the normal reconnect flow handles it.
+        }
+      }
+
+      super(nextUrl, protocols);
+    }
+  }
+
+  window.WebSocket = AuthenticatedWebSocket as typeof WebSocket;
+}
+
 export function installApiBaseUrl(): void {
   if (installed) return;
   installed = true;
@@ -47,11 +75,9 @@ export function installApiBaseUrl(): void {
   let base = rawBase?.trim().replace(/\/+$/, "");
 
   if (base) {
-    // Guard against pasting just the Railway domain without a scheme.
     if (!/^https?:\/\//i.test(base)) {
       base = `https://${base}`;
     }
-    // eslint-disable-next-line no-console
     console.info(`[api-base-url] Routing relative /api/* requests to ${base}`);
   }
 
@@ -65,7 +91,6 @@ export function installApiBaseUrl(): void {
     const mergedInit = withAuthHeader(input, init);
 
     if (!resolvedBase) {
-      // Same-origin deployment: no URL rewriting needed, just the auth header.
       return realFetch(input, mergedInit);
     }
 
@@ -85,8 +110,8 @@ export function installApiBaseUrl(): void {
     if (typeof input === "string" || input instanceof URL) {
       return realFetch(absolute, mergedInit);
     }
-    // Request object: rebuild with the absolute URL, preserving its own
-    // init, then layer the auth header on top the same way.
     return realFetch(new Request(absolute, input), mergedInit);
   };
+
+  installWebSocketAuth();
 }
