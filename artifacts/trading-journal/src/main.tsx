@@ -3,21 +3,11 @@ import "./index.css";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PinGate } from "./components/PinGate";
 import { installApiBaseUrl } from "./lib/installApiBaseUrl";
-import { installMockFetch } from "./mock/installMockFetch";
-import { installMockBrokerState } from "./mock/seedBrokerState";
 
-// Must run before any fetch happens (including the mock interceptor below,
-// which passes non-mocked requests through to whatever `window.fetch` is at
-// that point) — see installApiBaseUrl.ts for why this is needed whenever the
-// frontend and backend are on different origins (e.g. two Railway services).
 installApiBaseUrl();
 
 // ── On-device debug console ────────────────────────────────────────────────
-// Loads Eruda (a floating dev-console for phones with no desktop/USB
-// debugging available) whenever the page URL has `?debug=1`. Safe no-op
-// otherwise — only pulls the script from jsDelivr when explicitly requested.
-// Usage: open  https://<your-app>/?debug=1  on the phone, tap the floating
-// circle it adds in the corner, then check its "Console" tab.
+// Loads Eruda only when explicitly requested with ?debug=1.
 if (new URLSearchParams(window.location.search).get("debug") === "1") {
   const s = document.createElement("script");
   s.src = "https://cdn.jsdelivr.net/npm/eruda";
@@ -28,19 +18,17 @@ if (new URLSearchParams(window.location.search).get("debug") === "1") {
   };
 }
 
-// Dev-only deterministic mock data layer — see src/mock/config.ts (DEV_MODE).
-// No-op (dead-code-eliminated) in production builds.
-installMockFetch();
-installMockBrokerState();
+// Mock fetch / mock broker state are intentionally NOT installed here.
+// The production app must always use the real backend/database and must never
+// display development/demo trades or seeded PNL values.
 
-// ── Disable accidental pinch-zoom & double-tap zoom on mobile/tablet ──────────
+// ── Disable accidental pinch-zoom & double-tap zoom on mobile/tablet ───────
 document.addEventListener(
   "touchmove",
   (e: TouchEvent) => {
-    // Only block multi-finger (pinch) gestures — single finger scroll is fine
     if (e.touches.length > 1) e.preventDefault();
   },
-  { passive: false }
+  { passive: false },
 );
 
 let lastTouchEnd = 0;
@@ -51,18 +39,11 @@ document.addEventListener(
     if (now - lastTouchEnd <= 300) e.preventDefault();
     lastTouchEnd = now;
   },
-  { passive: false }
+  { passive: false },
 );
-// ─────────────────────────────────────────────────────────────────────────────
 
 const rootEl = document.getElementById("root")!;
 
-/**
- * Renders a plain-DOM error message. Deliberately does NOT use React — this
- * path only runs when something went wrong before/while React itself was
- * loading (e.g. an error thrown while evaluating App.tsx's import graph), so
- * we can't assume React is in a usable state.
- */
 function renderFatalBootError(error: unknown) {
   const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error("[boot] Failed to load the app:", error);
@@ -84,23 +65,15 @@ function renderFatalBootError(error: unknown) {
 async function boot() {
   console.info("[boot] Starting app…");
   try {
-    // Dynamic import so an exception thrown anywhere in App's import graph
-    // (module-level code, not just render) is caught here explicitly,
-    // instead of silently failing during the static <script type="module">
-    // evaluation before React ever gets a chance to run.
     const { default: App } = await import("./App");
     console.info("[boot] App module loaded, mounting React root…");
 
     const root = createRoot(rootEl, {
       onUncaughtError: (error, errorInfo) => {
-        console.error(
-          "[boot] onUncaughtError — a render error escaped every ErrorBoundary:",
-          error,
-          errorInfo.componentStack,
-        );
+        console.error("[boot] onUncaughtError:", error, errorInfo.componentStack);
       },
       onCaughtError: (error, errorInfo) => {
-        console.error("[boot] onCaughtError — caught by ErrorBoundary:", error, errorInfo.componentStack);
+        console.error("[boot] onCaughtError:", error, errorInfo.componentStack);
       },
       onRecoverableError: (error, errorInfo) => {
         console.warn("[boot] onRecoverableError:", error, errorInfo.componentStack);
