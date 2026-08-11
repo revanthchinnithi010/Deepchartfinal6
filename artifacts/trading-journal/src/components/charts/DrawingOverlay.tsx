@@ -6,6 +6,8 @@ import { ColorPickerGlass } from "@/components/ColorPickerGlass";
 import { useChartContext } from "@/contexts/ChartContext";
 import { ChartBarsContext } from "@/contexts/ChartBarsContext";
 import { useDrawingStore, getDeletedDrawingIds, saveDrawingStyle } from "@/store/drawingStore";
+import { useAlertStore } from "@/store/alertStore";
+import type { TrendlineAlert } from "@/data/alertsData";
 import { useChartStore } from "@/store/chartStore";
 import { toArray } from "@/lib/safeArray";
 import { type Drawing, type DrawingPoint, type DrawingStyle, type ToolType, pointsNeeded, isFreehand, DEFAULT_STYLE } from "@/types/drawing";
@@ -38,6 +40,61 @@ function getIntervalSec(tf: string): number {
   if (tf === "1M" || tf === "M")  return 2592000;
   const m = parseInt(tf, 10);
   return isNaN(m) ? 3600 : m * 60;
+}
+
+
+function normalizeTimeframe(tf: string): string {
+  const raw = String(tf ?? "").trim().toUpperCase().replace(/\s+/g, "");
+  if (!raw) return "";
+  if (raw === "D" || raw === "1D") return "1D";
+  if (raw === "W" || raw === "1W") return "1W";
+  if (raw === "M" || raw === "1M") return "1M";
+  const n = raw.endsWith("M") ? raw.slice(0, -1) : raw.endsWith("H") ? String(Number(raw.slice(0, -1)) * 60) : raw;
+  const mins = Number(n);
+  if (Number.isFinite(mins)) return `${mins}M`;
+  return raw;
+}
+
+function calculateLatestAtr(bars: OhlcBar[], period: number): number | null {
+  if (!Array.isArray(bars) || bars.length < period + 1) return null;
+  const p = Math.max(1, Math.floor(period));
+  const start = Math.max(1, bars.length - p * 3);
+  let trs: number[] = [];
+  for (let i = start; i < bars.length; i++) {
+    const cur = bars[i];
+    const prev = bars[i - 1];
+    if (!cur || !prev) continue;
+    const tr = Math.max(
+      Number(cur.high) - Number(cur.low),
+      Math.abs(Number(cur.high) - Number(prev.close)),
+      Math.abs(Number(cur.low) - Number(prev.close)),
+    );
+    if (Number.isFinite(tr)) trs.push(Math.max(0, tr));
+  }
+  if (trs.length < p) return null;
+  let atr = trs.slice(0, p).reduce((a, b) => a + b, 0) / p;
+  for (let i = p; i < trs.length; i++) atr = ((atr * (p - 1)) + trs[i]) / p;
+  return Number.isFinite(atr) && atr > 0 ? atr : null;
+}
+
+function offsetLinePoints(
+  points: Px[],
+  prices: DrawingPoint[],
+  buffer: number,
+  candle: any,
+): [Px[], Px[]] | null {
+  if (points.length < 2 || prices.length < 2 || !candle) return null;
+  const upper: Px[] = [];
+  const lower: Px[] = [];
+  for (let i = 0; i < 2; i++) {
+    const price = Number(prices[i]?.price);
+    const yu = candle.priceToCoordinate(price + buffer);
+    const yl = candle.priceToCoordinate(price - buffer);
+    if (yu == null || yl == null || !Number.isFinite(Number(yu)) || !Number.isFinite(Number(yl))) return null;
+    upper.push({ x: points[i].x, y: Number(yu) });
+    lower.push({ x: points[i].x, y: Number(yl) });
+  }
+  return [upper, lower];
 }
 
 // ── Fibonacci levels ──────────────────────────────────────────────────────────
@@ -170,6 +227,87 @@ function parallelOffset(a: Px, b: Px, dist: number): [Px, Px] {
   const len = Math.hypot(dx, dy) || 1;
   const nx = -dy / len * dist, ny = dx / len * dist;
   return [{ x: a.x + nx, y: a.y + ny }, { x: b.x + nx, y: b.y + ny }];
+}
+
+
+// ── ATR proximity visual band ──────────────────────────────────────────────────
+// Rendered independently from DrawingShape because unselected drawings are
+// painted by Canvas2D. This SVG layer is pointer-events:none and therefore never
+// interferes with chart panning/zooming.
+function AtrProximityBand({
+  drawing,
+  alert,
+  toPx,
+  W,
+  candle,
+  bars,
+}: {
+  drawing: Drawing;
+  alert: TrendlineAlert;
+  toPx: (pt: DrawingPoint) => Px | null;
+  W: number;
+  candle: any;
+  bars: OhlcBar[];
+}) {
+  if (!drawing.isVisible || alert.status !== "active" || alert.condition !== "atr_proximity") return null;
+  if (drawing.points.length < 2 || !candle) return null;
+
+  const period = Math.max(5, Math.min(50, Number(alert.atrPeriod ?? 14)));
+  const multiplier = Math.max(0.05, Math.min(1, Number(alert.atrMultiplier ?? 0.15)));
+  const atr = calculateLatestAtr(bars, period);
+  if (atr == null) return null;
+
+  const base = drawing.points.slice(0, 2);
+  const center = base.map(toPx).filter(Boolean) as Px[];
+  if (center.length < 2) return null;
+
+  const shifted = offsetLinePoints(center, base, atr * multiplier, candle);
+  if (!shifted) return null;
+  const [upper0, lower0] = shifted;
+  let upper = upper0;
+  let lower = lower0;
+
+  const extendLeft = drawing.style.extendLeft ?? false;
+  const extendRight = drawing.style.extendRight ?? drawing.toolType === "ray";
+
+  const extendPair = (a: Px, b: Px, side: "left" | "right") => {
+    if (Math.abs(b.x - a.x) < 0.1) return a;
+    const m = (b.y - a.y) / (b.x - a.x);
+    if (side === "left") return { x: -12, y: a.y + m * (-12 - a.x) };
+    return { x: W + 12, y: a.y + m * (W + 12 - a.x) };
+  };
+
+  if (extendLeft) {
+    upper = [extendPair(upper[0], upper[1], "left"), ...upper];
+    lower = [extendPair(lower[0], lower[1], "left"), ...lower];
+  }
+  if (extendRight) {
+    upper = [...upper, extendPair(upper[upper.length - 2], upper[upper.length - 1], "right")];
+    lower = [...lower, extendPair(lower[lower.length - 2], lower[lower.length - 1], "right")];
+  }
+
+  const poly = [
+    ...upper,
+    ...[...lower].reverse(),
+  ].map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const upperPath = upper.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const lowerPath = lower.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const mid = center[0].x <= center[1].x
+    ? { x: center[0].x + (center[1].x - center[0].x) * 0.55, y: center[0].y + (center[1].y - center[0].y) * 0.55 }
+    : { x: center[1].x + (center[0].x - center[1].x) * 0.45, y: center[1].y + (center[0].y - center[1].y) * 0.45 };
+  const label = `ATR ${period} × ${multiplier.toFixed(2)}`;
+
+  return (
+    <g style={{ pointerEvents: "none" }}>
+      <polygon points={poly} fill="rgba(245,158,11,0.10)" />
+      <path d={upperPath} fill="none" stroke="rgba(245,158,11,0.32)" strokeWidth={1} strokeDasharray="5 4" />
+      <path d={lowerPath} fill="none" stroke="rgba(245,158,11,0.32)" strokeWidth={1} strokeDasharray="5 4" />
+      <g transform={`translate(${mid.x.toFixed(1)},${mid.y.toFixed(1)})`}>
+        <rect x={-38} y={-18} width={76} height={18} rx={7} fill="rgba(12,12,12,0.88)" stroke="rgba(245,158,11,0.42)" />
+        <text x={0} y={-5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#fbbf24" fontFamily="Inter,system-ui,sans-serif">{label}</text>
+      </g>
+    </g>
+  );
 }
 
 // ── DrawingShape ──────────────────────────────────────────────────────────────
@@ -2325,6 +2463,17 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   // replayBarCount is kept as an unused dep-guard in case callers use it elsewhere.
   void replayBarCount;
   const candleBars = barsRef.current as OhlcBar[];
+  const alerts = useAlertStore(state => state.alerts);
+  const atrTrendlineAlerts = useMemo(() => {
+    const active = alerts.filter((a): a is TrendlineAlert =>
+      a.type === "trendline" &&
+      a.status === "active" &&
+      a.condition === "atr_proximity" &&
+      a.symbol.toUpperCase() === symbol.toUpperCase() &&
+      normalizeTimeframe(a.timeframe) === normalizeTimeframe(timeframe)
+    );
+    return active;
+  }, [alerts, symbol, timeframe]);
 
   // Bar half-width derived from LWC's logical coordinate system.
   // Adjacent logical positions are always exactly one barSpacing apart in pixels,
@@ -4018,6 +4167,35 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDrawing?.id, selectedDrawing?.points, overlayRef.current?.clientWidth]);
 
+  const atrBands = atrTrendlineAlerts.map(alert => {
+    const matched = drawings.find(d => {
+      if (alert.drawingDisplayId && d.displayId) return alert.drawingDisplayId === d.displayId;
+      const sameSymbol = d.symbol ? d.symbol.toUpperCase() === symbol.toUpperCase() : true;
+      if (!sameSymbol || d.points.length < 2) return false;
+      const p1 = Math.abs(Number(d.points[0]?.price) - Number(alert.point1Price));
+      const p2 = Math.abs(Number(d.points[1]?.price) - Number(alert.point2Price));
+      const aT1 = Math.floor(new Date(alert.point1Time).getTime() / 1000);
+      const aT2 = Math.floor(new Date(alert.point2Time).getTime() / 1000);
+      const t1 = Math.abs(Number(d.points[0]?.time) - aT1);
+      const t2 = Math.abs(Number(d.points[1]?.time) - aT2);
+      return p1 < Math.max(Math.abs(alert.point1Price) * 1e-8, 1e-8) &&
+             p2 < Math.max(Math.abs(alert.point2Price) * 1e-8, 1e-8) &&
+             t1 <= 2 && t2 <= 2;
+    });
+    if (!matched) return null;
+    return (
+      <AtrProximityBand
+        key={`atr-band-${alert.id}`}
+        drawing={matched}
+        alert={alert}
+        toPx={toPx}
+        W={overlayRef.current?.clientWidth ?? 0}
+        candle={candle}
+        bars={candleBars}
+      />
+    );
+  });
+
   return (
     <div
       ref={overlayRef}
@@ -4061,6 +4239,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
         }}
       />
       <svg width="100%" height="100%" style={{ overflow: "hidden", display: "block", willChange: "transform", transform: "translate3d(0,0,0)", touchAction: "none", position: "relative" }}>
+        {atrBands}
         <defs>
           <clipPath id="drawing-clip">
             {/* Inset 4px on the left so endpoint circles (r≤3.5) never form a
