@@ -18,10 +18,6 @@ import { createAuthRouter, requirePinVerified } from "./routes/auth.js";
 
 declare module "express-session" {
   interface SessionData {
-    // Note: PIN-gate verification no longer lives here — it's a stateless
-    // bearer token now (see routes/auth.ts) so it isn't affected by
-    // cross-site cookie blocking. This session is still used for the
-    // broker OAuth handshakes below.
     deltaOAuthState?: string;
     pendingBrokerAccount?: {
       accountId: number;
@@ -51,32 +47,27 @@ export function createApp(deps: {
 
   app.set("trust proxy", 1);
 
-  const allowedOrigins: Array<string | RegExp> = [
-    /\.replit\.dev$/,
-    /\.pike\.replit\.dev$/,
-    /\.replit\.app$/,
-    // Matches both *.railway.app and *.up.railway.app (Railway's public
-    // service domains end in one of these two suffixes depending on plan/
-    // region), so the frontend and backend can live on two separate
-    // Railway services and still pass CORS.
-    /\.railway\.app$/,
-    /localhost/,
-    // Optional extra origins, e.g. a custom domain in front of the
-    // frontend — comma-separated exact origins, matching RAILWAY_DEPLOY.md.
+  // CORS is deliberately exact-origin for Railway deployments. Set
+  // CORS_ALLOWED_ORIGINS to the frontend origin(s), comma-separated, e.g.
+  // https://deepcharts-production.up.railway.app
+  // Do not use a *.railway.app wildcard: another Railway app must never be
+  // treated as an allowed browser origin for this private API.
+  const allowedOrigins = new Set<string>([
+    "http://localhost",
+    "http://localhost:3000",
+    "http://localhost:5173",
     ...((process.env["CORS_ALLOWED_ORIGINS"] ?? "")
       .split(",")
-      .map((o) => o.trim())
+      .map((o) => o.trim().replace(/\/+$/, ""))
       .filter(Boolean)),
-  ];
+  ]);
 
   app.use(
     cors({
       origin: (origin, cb) => {
         if (!origin) return cb(null, true);
-        const ok = allowedOrigins.some((p) =>
-          typeof p === "string" ? p === origin : p.test(origin),
-        );
-        cb(null, ok ? origin : false);
+        const normalized = origin.replace(/\/+$/, "");
+        cb(null, allowedOrigins.has(normalized) ? origin : false);
       },
       credentials: true,
     }),
