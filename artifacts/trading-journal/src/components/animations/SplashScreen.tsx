@@ -1,13 +1,17 @@
 /**
  * SplashScreen — first-load intro.
  * Shows once per browser session and then dismisses automatically.
+ *
+ * The splash intentionally uses a pure black background and the same app icon
+ * declared by the PWA manifest so the launch experience stays visually
+ * consistent with the installed app icon.
  */
 import { useEffect, useRef, useState } from "react";
 import { animateSplashReveal, animateSplashExit } from "@/animations/anime";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
-import { Zap } from "lucide-react";
 
 const SESSION_KEY = "tj_splash_seen_v1";
+const APP_ICON = "/icon-192.png";
 
 interface SplashScreenProps {
   dismissAfter?: number;
@@ -65,38 +69,17 @@ export function SplashScreen({ dismissAfter = 1650, onDone }: SplashScreenProps)
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        background: "radial-gradient(ellipse at 50% 40%, rgba(30,31,44,1) 0%, rgba(7,8,11,1) 100%)",
+        background: "#000000",
         willChange: "transform, opacity",
         userSelect: "none",
         touchAction: "none",
       }}
     >
       <div
-        className="splash-glow"
-        style={{
-          position: "absolute",
-          width: 280,
-          height: 280,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(99,102,241,0.28) 0%, rgba(6,182,212,0.10) 50%, transparent 80%)",
-          filter: "blur(28px)",
-          pointerEvents: "none",
-        }}
-      />
-
-      <div
         className="splash-ring"
         style={{
           width: 88,
           height: 88,
-          borderRadius: 26,
-          background: "linear-gradient(135deg, rgba(99,102,241,0.18) 0%, rgba(5,7,10,0.90) 100%)",
-          border: "1.5px solid rgba(165,180,252,0.30)",
-          boxShadow: [
-            "0 0 0 6px rgba(99,102,241,0.06)",
-            "0 8px 40px rgba(0,0,0,0.55)",
-            "inset 0 1px 0 rgba(255,255,255,0.10)",
-          ].join(","),
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -104,12 +87,20 @@ export function SplashScreen({ dismissAfter = 1650, onDone }: SplashScreenProps)
           position: "relative",
         }}
       >
-        <div className="splash-logo">
-          <Zap
-            style={{ width: 40, height: 40, color: "rgba(230,235,255,0.92)" }}
-            fill="currentColor"
-          />
-        </div>
+        <img
+          className="splash-logo"
+          src={APP_ICON}
+          alt="Deep Charts"
+          width={88}
+          height={88}
+          draggable={false}
+          style={{
+            width: 88,
+            height: 88,
+            objectFit: "contain",
+            display: "block",
+          }}
+        />
       </div>
 
       <div
