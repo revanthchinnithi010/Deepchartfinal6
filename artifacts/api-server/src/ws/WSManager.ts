@@ -1,12 +1,30 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
 import { logger } from "../lib/logger.js";
+import { isPinConfigured, verifyToken } from "../routes/auth.js";
 
 export type WSMessage = Record<string, unknown> & { type: string };
 
 interface ClientState {
   /** "SYMBOL:INTERVAL" the client is subscribed to, null = send all (pre-subscription default) */
   candleKey: string | null;
+}
+
+function getWsAuthToken(req: IncomingMessage): string | null {
+  try {
+    const url = new URL(req.url ?? "", "http://localhost");
+    return url.searchParams.get("token");
+  } catch {
+    return null;
+  }
+}
+
+function rejectUpgrade(socket: import("net").Socket, status = 401, message = "Unauthorized"): void {
+  try {
+    socket.write(`HTTP/1.1 ${status} ${message}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+  } finally {
+    socket.destroy();
+  }
 }
 
 export class WSManager {
@@ -28,19 +46,34 @@ export class WSManager {
 
   handleUpgrade(req: IncomingMessage, socket: import("net").Socket, head: Buffer): void {
     const pathname = req.url ?? "";
-    if (pathname !== "/ws" && pathname !== "/api/ws") {
+    let url: URL;
+    try {
+      url = new URL(pathname, "http://localhost");
+    } catch {
       socket.destroy();
       return;
     }
+
+    if (url.pathname !== "/ws" && url.pathname !== "/api/ws") {
+      socket.destroy();
+      return;
+    }
+
+    // The browser WebSocket API cannot attach an Authorization header. The
+    // frontend therefore sends the signed PIN token as a short-lived query
+    // parameter during the upgrade. Never log the URL/token.
+    if (isPinConfigured() && !verifyToken(getWsAuthToken(req))) {
+      logger.warn({ ip: req.socket.remoteAddress ?? "unknown" }, "WSManager: rejected unauthenticated WebSocket upgrade");
+      rejectUpgrade(socket);
+      return;
+    }
+
     this.wss.handleUpgrade(req, socket, head, (ws) => {
       this.wss.emit("connection", ws, req);
     });
   }
 
-  /**
-   * Broadcast a message to ALL connected clients.
-   * JSON is serialized once and reused across all sends.
-   */
+  /** Broadcast a message to ALL connected clients. */
   broadcast(msg: WSMessage): void {
     const payload = JSON.stringify(msg);
     let sent = 0;
@@ -56,34 +89,20 @@ export class WSManager {
   }
 
   /**
-   * Per-client candle broadcast — the key optimization.
-   *
-   * Instead of broadcasting all 9 intervals to every client (the old behaviour),
-   * each client declares the one symbol:interval it cares about via the
-   * "subscribe_candles" message. This reduces candle_update traffic by ~89% for
-   * a client watching a single timeframe.
-   *
-   * Clients that have not yet sent a subscription receive all updates (safe
-   * backward-compatible default during the initial connect window).
-   *
-   * Serialisation is done once per unique key using a payload cache that is
-   * cleared at the start of each new ingest cycle (see clearCandleCache).
+   * Per-client candle broadcast. Each client declares the one symbol:interval
+   * it cares about via "subscribe_candles".
    */
   broadcastCandleUpdate(symbol: string, interval: string, bar: object): void {
     if (this.clients.size === 0) return;
 
     const key = `${symbol}:${interval}`;
-
-    // Lazy-serialise: only stringify if at least one client needs this key
     let payload: string | undefined;
 
     for (const client of this.clients) {
       if (client.readyState !== WebSocket.OPEN) continue;
 
-      const state   = this.clientState.get(client);
+      const state = this.clientState.get(client);
       const candKey = state?.candleKey ?? null;
-
-      // Send if: client hasn't subscribed yet (null) OR subscribed to this key
       if (candKey !== null && candKey !== key) continue;
 
       if (payload === undefined) {
@@ -98,7 +117,6 @@ export class WSManager {
     }
   }
 
-  /** Call once per tick cycle to invalidate the serialisation cache */
   clearCandleCache(): void {
     this.candlePayloadCache.clear();
   }
@@ -136,10 +154,10 @@ export class WSManager {
             this.send(ws, { type: "pong" });
           } else if (msg.type === "subscribe_candles") {
             const sym = String(msg.symbol ?? "").trim();
-            const iv  = String(msg.interval ?? "").trim();
+            const iv = String(msg.interval ?? "").trim();
             if (sym && iv) {
               const newKey = `${sym}:${iv}`;
-              const state  = this.clientState.get(ws);
+              const state = this.clientState.get(ws);
               if (state) {
                 state.candleKey = newKey;
                 logger.info({ ip, candleKey: newKey }, "WSManager: client subscribed to candles");
@@ -177,9 +195,6 @@ export class WSManager {
         if (client.readyState === WebSocket.OPEN) {
           const sentAt = this.pendingPongs.get(client);
           if (sentAt !== undefined && now - sentAt > this.PONG_TIMEOUT_MS) {
-            // Previous ping never got a pong back — the socket is half-dead
-            // (server still sees OPEN, but the browser/TCP peer is gone).
-            // Force-terminate so the client's onclose fires and it reconnects.
             logger.warn("WSManager: pong timeout — terminating dead connection");
             this.clients.delete(client);
             this.clientState.delete(client);
@@ -199,4 +214,4 @@ export class WSManager {
 
     this.wss.on("close", () => clearInterval(pingInterval));
   }
-            }
+}
