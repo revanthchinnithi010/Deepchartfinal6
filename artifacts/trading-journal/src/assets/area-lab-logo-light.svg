@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="253 254 524 102" width="524" height="102">
+  <defs>
+    <linearGradient id="wordGradientLight" x1="0%" y1="0%" x2="100%" y2="30%">
+      <stop offset="0%" stop-color="#7B3FE4"/>
+      <stop offset="45%" stop-color="#C4359A"/>
+      <stop offset="100%" stop-color="#F05C86"/>
+    </linearGradient>
+  </defs>
+  <text x="512" y="349" text-anchor="middle" font-size="118" letter-spacing="-2">
+    <tspan font-family="Arial, Helvetica, sans-serif" font-weight="800" fill="url(#wordGradientLight)">area</tspan><tspan font-family="Arial, Helvetica, sans-serif" font-weight="800" fill="#111827">.</tspan><tspan font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-weight="400" fill="#111827" letter-spacing="-1">lab</tspan>
+  </text>
+</svg>

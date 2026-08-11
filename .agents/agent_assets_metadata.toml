@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "R_9TD8kCfoClVEPpMBmOr"
+uri = "file://artifacts/trading-journal-tablet/assets/images/icon.png"
+type = "image"
+title = "trading-journal-tablet-icon"

@@ -1,0 +1,15 @@
+# Railway service: FRONTEND (production web app) — @workspace/trading-journal
+# Use this file's path (railway.toml, the default) as the Config-as-code path
+# for the frontend service in Railway's dashboard.
+#
+# The --filter "...pkg..." form installs ONLY @workspace/trading-journal and the
+# workspace packages it actually depends on (lib/db, lib/api-zod, lib/api-client-react),
+# so mockup-sandbox, trading-journal-tablet, and their dependencies are never
+# installed or built here.
+[build]
+builder = "nixpacks"
+buildCommand = "pnpm install --no-frozen-lockfile --filter \"@workspace/trading-journal...\" && PORT=3000 BASE_PATH=/ pnpm --filter @workspace/trading-journal build"
+watchPatterns = ["artifacts/trading-journal/**", "lib/**", "pnpm-lock.yaml", "pnpm-workspace.yaml", "package.json", "nixpacks.toml"]
+
+[deploy]
+startCommand = "BASE_PATH=/ pnpm --filter @workspace/trading-journal serve"

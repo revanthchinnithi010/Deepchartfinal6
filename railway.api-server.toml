@@ -1,0 +1,24 @@
+# Railway service: BACKEND — @workspace/api-server
+# In Railway's dashboard, create a second service pointing at this same repo,
+# then set its Config-as-code path (Settings → Config-as-code) to:
+#   railway.api-server.toml
+#
+# The --filter "...pkg..." form installs ONLY @workspace/api-server and the
+# workspace packages it actually depends on (lib/db, lib/api-zod), so
+# mockup-sandbox, trading-journal-tablet, trading-journal, and their
+# dependencies are never installed or built here.
+[build]
+builder = "nixpacks"
+# `NODE_ENV=development` here forces pnpm to install devDependencies during
+# this install step regardless of what NODE_ENV is set to as a runtime env
+# var on the service (pnpm/npm skip devDependencies by default when
+# NODE_ENV=production is visible at install time, which silently breaks the
+# build if any build-only tool — esbuild, bundler plugins, etc. — is
+# still listed as a devDependency). This doesn't affect what NODE_ENV the
+# running server sees at runtime — only `pnpm --filter ... start` below,
+# using the service's actual NODE_ENV variable, controls that.
+buildCommand = "NODE_ENV=development pnpm install --no-frozen-lockfile --filter \"@workspace/api-server...\" && pnpm --filter @workspace/api-server build"
+watchPatterns = ["artifacts/api-server/**", "lib/db/**", "lib/api-zod/**", "pnpm-lock.yaml", "pnpm-workspace.yaml", "package.json", "nixpacks.toml"]
+
+[deploy]
+startCommand = "pnpm --filter @workspace/api-server start"

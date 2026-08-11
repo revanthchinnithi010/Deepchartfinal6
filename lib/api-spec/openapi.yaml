@@ -1,0 +1,437 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: Trading Journal API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: trades
+    description: Trade operations
+  - name: stats
+    description: Statistics and analytics
+  - name: notes
+    description: Notebook entries
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /trades:
+    get:
+      operationId: listTrades
+      tags: [trades]
+      summary: List all trades
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: symbol
+          schema: { type: string }
+        - in: query
+          name: outcome
+          schema: { type: string, enum: [win, loss, breakeven] }
+      responses:
+        "200":
+          description: List of trades
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradeListResponse"
+    post:
+      operationId: createTrade
+      tags: [trades]
+      summary: Create a trade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TradeInput"
+      responses:
+        "201":
+          description: Created trade
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+
+  /trades/{id}:
+    get:
+      operationId: getTrade
+      tags: [trades]
+      summary: Get a single trade
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Trade
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateTrade
+      tags: [trades]
+      summary: Update a trade
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TradeUpdate"
+      responses:
+        "200":
+          description: Updated trade
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+    delete:
+      operationId: deleteTrade
+      tags: [trades]
+      summary: Delete a trade
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+
+  /stats/summary:
+    get:
+      operationId: getStatsSummary
+      tags: [stats]
+      summary: Get overall trading statistics
+      responses:
+        "200":
+          description: Summary stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsSummary"
+
+  /stats/equity-curve:
+    get:
+      operationId: getEquityCurve
+      tags: [stats]
+      summary: Get equity curve data points
+      responses:
+        "200":
+          description: Equity curve data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EquityPoint"
+
+  /stats/weekly-pnl:
+    get:
+      operationId: getWeeklyPnl
+      tags: [stats]
+      summary: Get weekly PNL bar chart data
+      responses:
+        "200":
+          description: Weekly PNL data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WeeklyPnlPoint"
+
+  /stats/calendar-heatmap:
+    get:
+      operationId: getCalendarHeatmap
+      tags: [stats]
+      summary: Get daily PNL for calendar heatmap
+      parameters:
+        - in: query
+          name: year
+          schema: { type: integer }
+        - in: query
+          name: month
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Calendar heatmap data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CalendarDay"
+
+  /stats/symbol-breakdown:
+    get:
+      operationId: getSymbolBreakdown
+      tags: [stats]
+      summary: PNL breakdown by symbol
+      responses:
+        "200":
+          description: Symbol breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SymbolStat"
+
+  /notes:
+    get:
+      operationId: listNotes
+      tags: [notes]
+      summary: List notebook entries
+      responses:
+        "200":
+          description: List of notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Note"
+    post:
+      operationId: createNote
+      tags: [notes]
+      summary: Create a notebook entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteInput"
+      responses:
+        "201":
+          description: Created note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+
+  /notes/{id}:
+    patch:
+      operationId: updateNote
+      tags: [notes]
+      summary: Update a notebook entry
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteUpdate"
+      responses:
+        "200":
+          description: Updated note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+    delete:
+      operationId: deleteNote
+      tags: [notes]
+      summary: Delete a notebook entry
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status: { type: string }
+      required: [status]
+
+    Trade:
+      type: object
+      required: [id, symbol, side, entryPrice, exitPrice, quantity, pnl, outcome, entryDate, exitDate, createdAt]
+      properties:
+        id: { type: integer }
+        symbol: { type: string }
+        side: { type: string, enum: [long, short] }
+        entryPrice: { type: number }
+        exitPrice: { type: number }
+        quantity: { type: number }
+        pnl: { type: number }
+        pnlPercent: { type: ["number", "null"] }
+        outcome: { type: string, enum: [win, loss, breakeven] }
+        riskRewardRatio: { type: ["number", "null"] }
+        stopLoss: { type: ["number", "null"] }
+        takeProfit: { type: ["number", "null"] }
+        notes: { type: ["string", "null"] }
+        tags: { type: ["string", "null"] }
+        tvLink: { type: ["string", "null"] }
+        screenshot: { type: ["string", "null"] }
+        setupTags: { type: ["string", "null"] }
+        mistakeTags: { type: ["string", "null"] }
+        entryDate: { type: string }
+        exitDate: { type: string }
+        createdAt: { type: string }
+
+    TradeInput:
+      type: object
+      required: [symbol, side, entryPrice, exitPrice, quantity, entryDate, exitDate]
+      properties:
+        symbol: { type: string }
+        side: { type: string, enum: [long, short] }
+        entryPrice: { type: number }
+        exitPrice: { type: number }
+        quantity: { type: number }
+        stopLoss: { type: ["number", "null"] }
+        takeProfit: { type: ["number", "null"] }
+        notes: { type: ["string", "null"] }
+        tags: { type: ["string", "null"] }
+        tvLink: { type: ["string", "null"] }
+        screenshot: { type: ["string", "null"] }
+        setupTags: { type: ["string", "null"] }
+        mistakeTags: { type: ["string", "null"] }
+        entryDate: { type: string }
+        exitDate: { type: string }
+
+    TradeUpdate:
+      type: object
+      properties:
+        symbol: { type: string }
+        side: { type: string, enum: [long, short] }
+        entryPrice: { type: number }
+        exitPrice: { type: number }
+        quantity: { type: number }
+        stopLoss: { type: ["number", "null"] }
+        takeProfit: { type: ["number", "null"] }
+        notes: { type: ["string", "null"] }
+        tags: { type: ["string", "null"] }
+        tvLink: { type: ["string", "null"] }
+        screenshot: { type: ["string", "null"] }
+        setupTags: { type: ["string", "null"] }
+        mistakeTags: { type: ["string", "null"] }
+        entryDate: { type: string }
+        exitDate: { type: string }
+
+    TradeListResponse:
+      type: object
+      required: [trades, total, page, limit]
+      properties:
+        trades:
+          type: array
+          items:
+            $ref: "#/components/schemas/Trade"
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+
+    StatsSummary:
+      type: object
+      required: [netPnl, winRate, profitFactor, averageRR, totalTrades, winCount, lossCount, breakevenCount, averageWin, averageLoss, largestWin, largestLoss, currentStreak]
+      properties:
+        netPnl: { type: number }
+        winRate: { type: number }
+        profitFactor: { type: number }
+        averageRR: { type: number }
+        totalTrades: { type: integer }
+        winCount: { type: integer }
+        lossCount: { type: integer }
+        breakevenCount: { type: integer }
+        averageWin: { type: number }
+        averageLoss: { type: number }
+        largestWin: { type: number }
+        largestLoss: { type: number }
+        currentStreak: { type: integer }
+
+    EquityPoint:
+      type: object
+      required: [date, equity, pnl]
+      properties:
+        date: { type: string }
+        equity: { type: number }
+        pnl: { type: number }
+
+    WeeklyPnlPoint:
+      type: object
+      required: [week, pnl, trades]
+      properties:
+        week: { type: string }
+        pnl: { type: number }
+        trades: { type: integer }
+
+    CalendarDay:
+      type: object
+      required: [date, pnl, trades]
+      properties:
+        date: { type: string }
+        pnl: { type: number }
+        trades: { type: integer }
+
+    SymbolStat:
+      type: object
+      required: [symbol, pnl, trades, winRate]
+      properties:
+        symbol: { type: string }
+        pnl: { type: number }
+        trades: { type: integer }
+        winRate: { type: number }
+
+    Note:
+      type: object
+      required: [id, title, content, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        content: { type: string }
+        tags: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    NoteInput:
+      type: object
+      required: [title, content]
+      properties:
+        title: { type: string }
+        content: { type: string }
+        tags: { type: ["string", "null"] }
+
+    NoteUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        content: { type: string }
+        tags: { type: ["string", "null"] }

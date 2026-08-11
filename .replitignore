@@ -1,0 +1,36 @@
+# The format of this file is identical to `.dockerignore`.
+# It is used to reduce the size of deployed images to make the process of publishing faster.
+
+# ── pnpm / npm stores (re-installed at deploy time) ─────────────────────────
+.local
+node_modules
+**/node_modules
+
+# ── Build outputs (rebuilt at deploy time) ───────────────────────────────────
+**/dist
+**/build
+**/.expo
+**/.expo-shared
+**/*.tsbuildinfo
+**/out-tsc
+**/tmp
+
+# ── Dev / editor cache ────────────────────────────────────────────────────────
+.cache
+**/.cache
+.cursor
+.github
+.idea
+.vscode
+
+# ── Design reference assets (not needed at runtime) ──────────────────────────
+attached_assets
+
+# ── Stray generated files ─────────────────────────────────────────────────────
+zipFile.zip
+*.zip
+
+# ── Logs & OS files ──────────────────────────────────────────────────────────
+*.log
+.DS_Store
+Thumbs.db

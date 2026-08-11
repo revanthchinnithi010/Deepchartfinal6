@@ -1,0 +1,38 @@
+kind = "mobile"
+previewPath = "/tablet/"
+title = "Trading Journal Tablet"
+version = "1.0.0"
+id = "artifacts/trading-journal-tablet"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/tablet/" ]
+localPort = 23996
+
+[services.development]
+run = "pnpm --filter @workspace/trading-journal-tablet run dev"
+
+[services.production]
+# Metro bundle build removed - takes 10+ min and times out the deployment port check.
+# serve.js starts instantly and binds port 23996; healthcheck at /tablet/status returns 200.
+
+[services.production.run]
+args = [ "node", "artifacts/trading-journal-tablet/server/serve.js" ]
+
+[services.production.run.env]
+PORT = "23996"
+BASE_PATH = "/tablet/"
+NODE_ENV = "production"
+
+[services.production.health.startup]
+path = "/tablet/status"
+
+[services.env]
+PORT = "23996"
+BASE_PATH = "/tablet/"

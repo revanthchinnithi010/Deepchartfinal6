@@ -1,0 +1,58 @@
+modules = ["nodejs-20", "python-3.12", "web"]
+
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
+
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
+
+[workflows]
+runButton = "Project"
+
+[agent]
+stack = "PNPM_WORKSPACE"
+expertMode = true
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
+
+[nix]
+channel = "stable-25_05"
+
+[[ports]]
+localPort = 8080
+externalPort = 80
+
+[[ports]]
+localPort = 8081
+externalPort = 8081
+
+[[ports]]
+localPort = 8082
+externalPort = 5000
+
+[[ports]]
+localPort = 20958
+externalPort = 3002
+
+[[ports]]
+localPort = 21194
+externalPort = 3000
+
+[[ports]]
+localPort = 23996
+externalPort = 3003
+
+[[ports]]
+localPort = 23997
+externalPort = 3001
+
+[userenv]
+
+[userenv.shared]
+CTRADER_REDIRECT_URI = "https://fc296569-9095-4ef3-a84a-92eb91bdfc42-00-27ghd37ci70et.pike.replit.dev/api/ctrader/oauth/callback"
+
+[userenv.production]

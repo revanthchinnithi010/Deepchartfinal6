@@ -1,0 +1,15 @@
+# Node.js version pinning for Railway/Nixpacks.
+#
+# Root cause of the "setup │ nodejs_18" build: this file previously set
+# `[variables] NODE_VERSION = "22"`. "NODE_VERSION" is not a key Nixpacks'
+# Node provider looks at — it was just exported as an arbitrary, unused
+# build-time env var. With no recognized version signal, Nixpacks fell back
+# to its own hardcoded default (Node 18) when selecting the nixpkgs Node
+# package for the setup phase.
+#
+# The correct, officially documented key is NIXPACKS_NODE_VERSION. It only
+# accepts a bare major version (e.g. "22"), not a semver range — Nixpacks'
+# own engines.node/​.nvmrc parsers have the same "major version only"
+# limitation, so this is the most reliable single source of truth.
+[variables]
+NIXPACKS_NODE_VERSION = "22"
