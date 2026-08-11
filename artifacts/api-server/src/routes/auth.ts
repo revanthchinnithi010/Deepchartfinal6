@@ -3,39 +3,25 @@ import { timingSafeEqual, createHmac } from "crypto";
 import { logger } from "../lib/logger.js";
 
 /**
- * Simple PIN gate for personal-use deployments.
+ * Lightweight PIN gate for this personal deployment.
  *
- * This is NOT a full auth system — there are no user accounts. It exists
- * because the app's public Railway URL is otherwise reachable by anyone who
- * has (or guesses/finds) the link, and this is a single-user personal app.
- * Setting APP_PIN turns on a lightweight "enter the PIN once per session"
- * gate; leaving APP_PIN unset preserves the previous open-access behavior
- * exactly, so this is fully opt-in and never breaks an existing deployment.
- *
- * The PIN itself lives only in the APP_PIN env var (never sent to the
- * client, never logged). Comparison uses a constant-time check so response
- * timing can't be used to brute-force it digit-by-digit.
- *
- * TOKEN-BASED (not cookie-based) auth: successful verification returns a
- * signed, self-contained bearer token in the JSON response body. The
- * frontend stores it (localStorage) and sends it back as
- * `Authorization: Bearer <token>` on every /api/* request — see
- * installApiBaseUrl.ts. This deliberately avoids the session-cookie
- * approach used previously: mobile browsers (Chrome in particular) block
- * third-party/cross-site cookies (SameSite=None) by default whenever the
- * frontend and backend live on two different Railway domains, which made
- * the PIN "stick" on the entry screen but silently fail to authorize every
- * subsequent /api/* call. A bearer token in a normal header has no
- * cross-site cookie policy to run into, so it works the same whether
- * frontend and backend share an origin or not.
- *
- * The token is a signed HMAC, not a database-backed session, so there's
- * nothing to store server-side and nothing to prune — it's simply valid
- * until it expires or the signing secret changes.
+ * The PIN is never sent to the client. Successful verification returns a
+ * short-lived signed bearer token. The token is used for REST and WebSocket
+ * access so a public Railway URL cannot expose the private market/alert feed.
  */
 
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const TOKEN_MARKER = "pin-verified";
+const MAX_PIN_ATTEMPTS = 5;
+const PIN_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+
+const failedPinAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function getClientKey(req: import("express").Request): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0]?.trim();
+  return forwardedIp || req.ip || req.socket.remoteAddress || "unknown";
+}
 
 function getTokenSecret(): string {
   const secret = process.env["APP_PIN_TOKEN_SECRET"] ?? process.env["SESSION_SECRET"];
@@ -58,7 +44,7 @@ function issueToken(): string {
   return Buffer.from(`${payload}.${sign(payload)}`, "utf8").toString("base64url");
 }
 
-function verifyToken(token: string | undefined | null): boolean {
+export function verifyToken(token: string | undefined | null): boolean {
   if (!token) return false;
   try {
     const decoded = Buffer.from(token, "base64url").toString("utf8");
@@ -83,15 +69,15 @@ function verifyToken(token: string | undefined | null): boolean {
   }
 }
 
+export function isPinConfigured(): boolean {
+  return !!process.env["APP_PIN"];
+}
+
 function extractBearerToken(req: import("express").Request): string | null {
   const header = req.headers.authorization;
   if (!header) return null;
   const [scheme, token] = header.split(" ");
   return scheme?.toLowerCase() === "bearer" && token ? token : null;
-}
-
-function isPinConfigured(): boolean {
-  return !!process.env["APP_PIN"];
 }
 
 function pinMatches(candidate: string): boolean {
@@ -109,6 +95,41 @@ function pinMatches(candidate: string): boolean {
   return lengthOk && bytesOk;
 }
 
+function checkRateLimit(req: import("express").Request): { allowed: boolean; retryAfterSeconds: number } {
+  const now = Date.now();
+  const key = getClientKey(req);
+  const existing = failedPinAttempts.get(key);
+
+  if (!existing || existing.resetAt <= now) {
+    failedPinAttempts.set(key, { count: 0, resetAt: now + PIN_ATTEMPT_WINDOW_MS });
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  if (existing.count >= MAX_PIN_ATTEMPTS) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(1, Math.ceil((existing.resetAt - now) / 1000)),
+    };
+  }
+
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+
+function recordFailedAttempt(req: import("express").Request): void {
+  const key = getClientKey(req);
+  const now = Date.now();
+  const current = failedPinAttempts.get(key);
+  if (!current || current.resetAt <= now) {
+    failedPinAttempts.set(key, { count: 1, resetAt: now + PIN_ATTEMPT_WINDOW_MS });
+    return;
+  }
+  current.count += 1;
+}
+
+function clearFailedAttempts(req: import("express").Request): void {
+  failedPinAttempts.delete(getClientKey(req));
+}
+
 export function createAuthRouter(): IRouter {
   const router: IRouter = Router();
 
@@ -124,6 +145,13 @@ export function createAuthRouter(): IRouter {
       return;
     }
 
+    const rate = checkRateLimit(req);
+    if (!rate.allowed) {
+      res.setHeader("Retry-After", String(rate.retryAfterSeconds));
+      res.status(429).json({ ok: false, error: "Too many incorrect PIN attempts. Try again later." });
+      return;
+    }
+
     const pin = typeof req.body?.pin === "string" ? req.body.pin : "";
     if (!pin) {
       res.status(400).json({ ok: false, error: "PIN is required" });
@@ -131,11 +159,13 @@ export function createAuthRouter(): IRouter {
     }
 
     if (pinMatches(pin)) {
+      clearFailedAttempts(req);
       const token = issueToken();
       logger.info("auth: PIN verified — token issued");
       res.json({ ok: true, token });
     } else {
-      logger.warn("auth: incorrect PIN attempt");
+      recordFailedAttempt(req);
+      logger.warn({ attemptsRemaining: Math.max(0, MAX_PIN_ATTEMPTS - (failedPinAttempts.get(getClientKey(req))?.count ?? MAX_PIN_ATTEMPTS)) }, "auth: incorrect PIN attempt");
       res.status(401).json({ ok: false, error: "Incorrect PIN" });
     }
   });
@@ -156,10 +186,7 @@ export function requirePinVerified(
     next();
     return;
   }
-  // OAuth provider callbacks must be reachable without the app PIN bearer
-  // token. The provider redirects the browser directly to these endpoints,
-  // so it cannot attach our application Authorization header. Each callback
-  // is independently protected by its OAuth state/code exchange.
+  // OAuth callbacks must remain reachable without the app bearer token.
   if (
     req.path.startsWith("/api/auth/") ||
     req.path === "/api/ctrader/oauth/callback" ||
