@@ -1,4 +1,5 @@
 @import "./index.base.css";
+@import "./light-premium.css";
 
 /* Trendline-alert condition controls — mobile-first polish */
 .alert-modal-sheet div.flex.gap-2:has(> button[class*="capitalize"]),
