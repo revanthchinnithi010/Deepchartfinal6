@@ -42,6 +42,35 @@
       })();
     </script>
     <!--
+      API routing safety net. Vite replaces %VITE_API_BASE_URL% at build time.
+      When configured, every /api/* request (including generated API-client
+      requests and raw fetches from market selectors) is sent to the backend
+      service instead of incorrectly hitting the frontend service itself.
+      Leaving the variable unset preserves same-origin /api behaviour for local
+      development and single-service deployments.
+    -->
+    <script>
+      (function () {
+        try {
+          var configured = "%VITE_API_BASE_URL%";
+          if (!configured || configured.indexOf("%VITE_API_BASE_URL%") !== -1) return;
+          var apiBase = configured.replace(/\/+$/, "");
+          var nativeFetch = window.fetch.bind(window);
+          window.fetch = function (input, init) {
+            var url = typeof input === "string"
+              ? input
+              : (input && input.url ? input.url : String(input));
+            if (url.indexOf("/api/") === 0) {
+              return nativeFetch(apiBase + url, init);
+            }
+            return nativeFetch(input, init);
+          };
+        } catch (e) {
+          console.warn("[api-routing] Could not install API routing fallback", e);
+        }
+      })();
+    </script>
+    <!--
       Last-resort boot safety net. Runs before /src/main.tsx even loads, so it
       catches failures that happen too early for React (or main.tsx's own
       try/catch around the App import) to handle — e.g. the module script
