@@ -22,6 +22,12 @@ import { logger } from "../lib/logger.js";
 
 const CTRADER_TOKEN_URL_SPOTS = "https://openapi.ctrader.com/apps/token";
 
+// These symbols are Delta Exchange live-tick symbols. They must never be
+// subscribed to cTrader, even when cTrader happens to list the same symbol.
+// Keeping the rule here makes every watchlist/startup/session-restore path use
+// the same broker boundary because all of them call getCtraderSymbolRow().
+const DELTA_ONLY_LIVE_TICK_SYMBOLS = new Set(["BTCUSD", "ETHUSD", "SOLUSD"]);
+
 /** Silently refresh the stored access token using the refresh token. */
 async function silentRefreshToken(): Promise<string | null> {
   const clientId     = process.env["CTRADER_CLIENT_ID"];
@@ -97,13 +103,19 @@ async function ensureTables(): Promise<void> {
 /**
  * Look up a symbol by name in ctrader_symbols.
  * Returns { symbolId, symbolName } or null if not found.
+ *
+ * Delta-only live-tick symbols deliberately return null even if cTrader has
+ * the same symbol in its catalog. This prevents duplicate broker feeds.
  */
 export async function getCtraderSymbolRow(
   symbol: string,
 ): Promise<{ symbolId: number; symbolName: string } | null> {
+  const normalized = symbol.toUpperCase().trim();
+  if (DELTA_ONLY_LIVE_TICK_SYMBOLS.has(normalized)) return null;
+
   const result = await pool.query(
     "SELECT symbol_id, symbol_name FROM ctrader_symbols WHERE UPPER(symbol_name) = $1 LIMIT 1",
-    [symbol.toUpperCase().trim()],
+    [normalized],
   );
   if (!result.rows.length) return null;
   const row = result.rows[0] as { symbol_id: number; symbol_name: string };
