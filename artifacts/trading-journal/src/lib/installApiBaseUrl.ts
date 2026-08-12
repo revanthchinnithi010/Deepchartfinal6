@@ -2,8 +2,8 @@
 // request, handling two concerns:
 //
 // 1. Auth header injection: attaches the PIN bearer token to REST requests.
-// 2. Base URL rewriting: prepends `VITE_API_BASE_URL` to relative `/api/*`
-//    requests when frontend and backend are separate services.
+// 2. Base URL rewriting: prepends the configured Railway API URL to relative
+//    `/api/*` requests when frontend and backend are separate services.
 //
 // It also wraps the browser WebSocket constructor once so the same signed PIN
 // token is attached to `/api/ws` upgrades. Browsers do not allow arbitrary
@@ -14,6 +14,11 @@ import { getStoredAuthToken } from "./authToken";
 
 let installed = false;
 let websocketPatched = false;
+
+// Production fallback for the current Railway API service. VITE_API_BASE_URL
+// can override this per deployment, but the production build must not silently
+// fall back to the frontend origin and produce misleading "API offline" errors.
+const PRODUCTION_API_BASE_URL = "https://workspaceapi-server-production-8b38.up.railway.app";
 
 function resolvePath(input: RequestInfo | URL): string | null {
   try {
@@ -72,14 +77,13 @@ export function installApiBaseUrl(): void {
   installed = true;
 
   const rawBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  let base = rawBase?.trim().replace(/\/+$/, "");
+  let base = (rawBase?.trim() || PRODUCTION_API_BASE_URL).replace(/\/+$/, "");
 
-  if (base) {
-    if (!/^https?:\/\//i.test(base)) {
-      base = `https://${base}`;
-    }
-    console.info(`[api-base-url] Routing relative /api/* requests to ${base}`);
+  if (!/^https?:\/\//i.test(base)) {
+    base = `https://${base}`;
   }
+
+  console.info(`[api-base-url] Routing relative /api/* requests to ${base}`);
 
   const resolvedBase = base;
   const realFetch = window.fetch.bind(window);
@@ -89,10 +93,6 @@ export function installApiBaseUrl(): void {
     if (!path || !path.startsWith("/api")) return realFetch(input, init);
 
     const mergedInit = withAuthHeader(input, init);
-
-    if (!resolvedBase) {
-      return realFetch(input, mergedInit);
-    }
 
     const search = (() => {
       try {
