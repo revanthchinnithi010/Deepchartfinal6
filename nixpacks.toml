@@ -1,15 +1,10 @@
-# Node.js version pinning for Railway/Nixpacks.
-#
-# Root cause of the "setup │ nodejs_18" build: this file previously set
-# `[variables] NODE_VERSION = "22"`. "NODE_VERSION" is not a key Nixpacks'
-# Node provider looks at — it was just exported as an arbitrary, unused
-# build-time env var. With no recognized version signal, Nixpacks fell back
-# to its own hardcoded default (Node 18) when selecting the nixpkgs Node
-# package for the setup phase.
-#
-# The correct, officially documented key is NIXPACKS_NODE_VERSION. It only
-# accepts a bare major version (e.g. "22"), not a semver range — Nixpacks'
-# own engines.node/​.nvmrc parsers have the same "major version only"
-# limitation, so this is the most reliable single source of truth.
+# Railway/Nixpacks configuration for Deepchartfinal6.
+# Keep Node 22 and explicitly disable frozen-lockfile for the install phase.
+# The repository lockfile is currently behind artifacts/trading-journal/package.json;
+# Railway's generated `pnpm i --frozen-lockfile` therefore fails before the
+# existing build phase gets a chance to reconcile the workspace dependencies.
 [variables]
 NIXPACKS_NODE_VERSION = "22"
+
+[phases.install]
+cmds = ["pnpm install --no-frozen-lockfile"]
