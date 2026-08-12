@@ -12,9 +12,8 @@ import { FeedHealthMonitor } from "./services/FeedHealthMonitor.js";
 import { runMigrations } from "./lib/migrate.js";
 import { logger } from "./lib/logger.js";
 import { AppConfigService } from "./services/AppConfigService.js";
-import { ctraderTickEngine } from "./services/CtraderTickEngine.js";
+import { ctraderTickEngine, type CtraderTick } from "./services/CtraderTickEngine.js";
 import { autoStartCtraderEngine, subscribeWatchlistCtraderSymbols } from "./routes/ctrader_spots.js";
-import type { CtraderTick } from "./services/CtraderTickEngine.js";
 import type { EngineStatusPayload } from "./services/CtraderTickEngine.js";
 import type { ProviderTick } from "./services/providers/BaseProvider.js";
 
@@ -31,6 +30,10 @@ const telegram         = new TelegramService();
 const delta            = new DeltaService(marketData);
 const alertEngine      = new AlertEngine(marketData, telegram, wsManager, candleAggregator);
 const healthMonitor    = new FeedHealthMonitor(marketData, wsManager, telegram);
+
+// These three symbols are intentionally served by Delta Exchange only for live
+// tick data. cTrader must never overwrite/compete with the Delta price stream.
+const DELTA_ONLY_LIVE_TICK_SYMBOLS = new Set(["BTCUSD", "ETHUSD", "SOLUSD"]);
 
 // Batch buffer: latest price per symbol — flushed every 5 s
 const livePriceBatch = new Map<string, { price: number; provider: string }>();
@@ -87,8 +90,18 @@ marketData.on("subscription_update", (update) => {
   wsManager.broadcast({ type: "subscription_update", ...update });
 });
 
-// ── cTrader tick engine → AlertEngine + CandleAggregator + WebSocket broadcast ─
+// ── cTrader tick engine → AlertEngine + CandleAggregator + WebSocket broadcast
 ctraderTickEngine.on("tick", (tick: CtraderTick) => {
+  const symbol = tick.symbol.toUpperCase().trim();
+
+  // Hard broker boundary: BTCUSD/ETHUSD/SOLUSD must come from Delta only.
+  // This protects against an existing cTrader catalog entry or stale
+  // subscription accidentally feeding a second live price source.
+  if (DELTA_ONLY_LIVE_TICK_SYMBOLS.has(symbol)) {
+    logger.debug({ symbol }, "cTrader tick ignored: symbol is Delta-only");
+    return;
+  }
+
   // Build a unified tick once and reuse it everywhere.
   const ctraderUnifiedTick: ProviderTick = {
     symbol:         tick.symbol,
@@ -100,11 +113,7 @@ ctraderTickEngine.on("tick", (tick: CtraderTick) => {
     provider:       "ctrader",
   };
 
-  // ── FIX: forward into MarketDataService so AlertEngine evaluates zones ──
-  // Previously cTrader ticks ONLY went to candleAggregator + wsManager.
-  // AlertEngine listens exclusively to marketData.on("tick"), so any zone
-  // whose symbol is served by cTrader never received a tick → evaluateZones()
-  // was never called → zone Enter alerts never fired.
+  // Forward into MarketDataService so AlertEngine evaluates zones.
   marketData.injectExternalTick(ctraderUnifiedTick);
 
   wsManager.clearCandleCache();
@@ -118,7 +127,7 @@ ctraderTickEngine.on("tick", (tick: CtraderTick) => {
     ask:      tick.ask,
     spread:   tick.spread,
     mid:      tick.mid,
-    price:    tick.mid,
+    price:   tick.mid,
     timestamp: tick.timestamp,
     provider: "ctrader",
   });
