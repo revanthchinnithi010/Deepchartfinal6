@@ -1373,8 +1373,11 @@ const CustomChart = memo(function CustomChart({
         timeVisible:     true,
         secondsVisible:  false,
         rightOffset:     40,
+        // Keep 1m candles physically readable on mobile instead of allowing
+        // hundreds of loaded bars to collapse into 1px dash/wick marks.
+        // Users can still zoom further out/in with the time-scale controls.
         barSpacing:      8,
-        minBarSpacing:   0.5,
+        minBarSpacing:   2.5,
         fixLeftEdge:     false,
         fixRightEdge:    false,
         tickMarkFormatter: (time: number, type: TickMarkType) => {
