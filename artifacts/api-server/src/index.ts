@@ -27,9 +27,9 @@ deltaSocketManager.setWsManager(wsManager);
 const marketData       = new MarketDataService();
 const candleAggregator = new CandleAggregator();
 const telegram         = new TelegramService();
-const delta            = new DeltaService(marketData);
-const alertEngine      = new AlertEngine(marketData, telegram, wsManager, candleAggregator);
-const healthMonitor    = new FeedHealthMonitor(marketData, wsManager, telegram);
+const delta             = new DeltaService(marketData);
+const alertEngine       = new AlertEngine(marketData, telegram, wsManager, candleAggregator);
+const healthMonitor     = new FeedHealthMonitor(marketData, wsManager, telegram);
 
 // These three symbols are intentionally served by Delta Exchange only for live
 // tick data. cTrader must never overwrite/compete with the Delta price stream.
@@ -39,6 +39,8 @@ const DELTA_ONLY_LIVE_TICK_SYMBOLS = new Set(["BTCUSD", "ETHUSD", "SOLUSD"]);
 const livePriceBatch = new Map<string, { price: number; provider: string }>();
 
 marketData.on("tick", (tick: ProviderTick) => {
+  // A tick causes a new candle payload to be generated. Invalidate the cached
+  // websocket payload before the aggregator emits its update.
   wsManager.clearCandleCache();
   candleAggregator.ingestTick(tick);
   wsManager.broadcast({ type: "tick", ...tick });
@@ -69,6 +71,10 @@ async function flushLivePrices(): Promise<void> {
 setInterval(() => { flushLivePrices().catch(() => {}); }, 5_000);
 
 candleAggregator.on("candle_update", (update: { symbol: string; interval: string; bar: object }) => {
+  // Authoritative cTrader trendbar updates do not pass through marketData's
+  // tick event, so the WS candle cache must also be invalidated here. Without
+  // this, the browser could keep receiving an older candle after an OHLC sync.
+  wsManager.clearCandleCache();
   wsManager.broadcastCandleUpdate(update.symbol, update.interval, update.bar);
 });
 
@@ -76,7 +82,7 @@ marketData.on("feed_status", (status) => wsManager.broadcast({ type: "feed_statu
 marketData.on("provider_status", (status) => wsManager.broadcast({ type: "provider_status", ...status }));
 marketData.on("subscription_update", (update) => wsManager.broadcast({ type: "subscription_update", ...update }));
 
-// ── cTrader tick engine → AlertEngine + CandleAggregator + WebSocket broadcast
+// ── cTrader tick engine → MarketDataService → CandleAggregator + WebSocket
 ctraderTickEngine.on("tick", (tick: CtraderTick) => {
   const symbol = tick.symbol.toUpperCase().trim();
 
@@ -89,6 +95,7 @@ ctraderTickEngine.on("tick", (tick: CtraderTick) => {
   // cTrader chart candles are quote/bid based. Use bid for candle aggregation
   // (ask is the fallback when a broker sends an ask-only spot update).
   const chartPrice = tick.bid > 0 ? tick.bid : tick.ask > 0 ? tick.ask : tick.mid;
+  if (!Number.isFinite(chartPrice) || chartPrice <= 0) return;
 
   const ctraderUnifiedTick: ProviderTick = {
     symbol:         tick.symbol,
@@ -100,22 +107,23 @@ ctraderTickEngine.on("tick", (tick: CtraderTick) => {
     provider:       "ctrader",
   };
 
+  // injectExternalTick emits the normal MarketDataService "tick" event. That
+  // single event is the canonical path into CandleAggregator, AlertEngine,
+  // persistence and the live-price broadcast. Do NOT call ingestTick again
+  // here — doing both paths duplicated every cTrader tick in the candle.
   marketData.injectExternalTick(ctraderUnifiedTick);
 
-  wsManager.clearCandleCache();
-  candleAggregator.ingestTick(ctraderUnifiedTick);
-
   wsManager.broadcast({
-    type:     "ctrader_tick",
-    symbol:   tick.symbol,
-    symbolId: tick.symbolId,
-    bid:      tick.bid,
-    ask:      tick.ask,
-    spread:   tick.spread,
-    mid:      tick.mid,
-    price:    chartPrice,
+    type:      "ctrader_tick",
+    symbol:    tick.symbol,
+    symbolId:  tick.symbolId,
+    bid:       tick.bid,
+    ask:       tick.ask,
+    spread:    tick.spread,
+    mid:       tick.mid,
+    price:     chartPrice,
     timestamp: tick.timestamp,
-    provider: "ctrader",
+    provider:  "ctrader",
   });
 });
 
@@ -205,9 +213,9 @@ healthMonitor.start();
 
   await AppConfigService.injectToEnv();
   logger.info({
-    DELTA_CLIENT_ID:        process.env["DELTA_CLIENT_ID"]        ? "SET" : "NOT SET",
-    CTRADER_CLIENT_ID:      process.env["CTRADER_CLIENT_ID"]      ? `SET (${process.env["CTRADER_CLIENT_ID"]!.length} chars)` : "NOT SET ⚠️",
-    CTRADER_CLIENT_SECRET:  process.env["CTRADER_CLIENT_SECRET"]  ? `SET (${process.env["CTRADER_CLIENT_SECRET"]!.length} chars)` : "NOT SET ⚠️",
+    DELTA_CLIENT_ID:       process.env["DELTA_CLIENT_ID"]       ? "SET" : "NOT SET",
+    CTRADER_CLIENT_ID:     process.env["CTRADER_CLIENT_ID"]     ? `SET (${process.env["CTRADER_CLIENT_ID"]!.length} chars)` : "NOT SET ⚠️",
+    CTRADER_CLIENT_SECRET: process.env["CTRADER_CLIENT_SECRET"] ? `SET (${process.env["CTRADER_CLIENT_SECRET"]!.length} chars)` : "NOT SET ⚠️",
   }, "Startup: credential injection complete — env status after inject");
 
   await Promise.all([
