@@ -66,69 +66,77 @@ export class CandleAggregator extends EventEmitter {
         // First tick ever for this symbol+interval
         b.current = { time: barStart, open: price, high: price, low: price, close: price, volume: 1 };
 
-        logger.debug({
-          symbol, interval,
-          timestamp: tsMs,
-          price,
-          candleStart: barStart,
-          open: price, high: price, low: price, close: price,
-          event: "new_bar",
-        }, "CandleAggregator: new bar (first tick)");
-
       } else if (barStart < b.current.time) {
-        // ── Out-of-order tick: timestamp is OLDER than the current bar ──────
-        // Accepting it would either corrupt the current bar or resurrect a
-        // completed bar. Silently discard — the next in-order tick will be fine.
-        logger.debug({
-          symbol, interval,
-          tickBarStart: barStart,
-          currentBarStart: b.current.time,
-          priceDrop: price,
-        }, "CandleAggregator: out-of-order tick discarded");
+        // Out-of-order tick: never corrupt the active candle.
+        logger.debug({ symbol, interval, tickBarStart: barStart, currentBarStart: b.current.time },
+          "CandleAggregator: out-of-order tick discarded");
         continue;
 
       } else if (b.current.time !== barStart) {
-        // ── New candle boundary ───────────────────────────────────────────────
+        // New candle boundary
         const closed = { ...b.current };
         b.completed.push(closed);
         if (b.completed.length > MAX_BARS) b.completed.shift();
         b.current = { time: barStart, open: price, high: price, low: price, close: price, volume: 1 };
 
-        logger.debug({
-          symbol, interval,
-          timestamp: tsMs,
-          price,
-          candleStart: barStart,
-          open: price, high: price, low: price, close: price,
-          closedBar: closed,
-          event: "new_bar",
-        }, "CandleAggregator: bar closed, new bar opened");
-
       } else {
-        // ── Update existing candle in-place (O(1), no allocation) ────────────
+        // Update existing candle in-place
         if (price > b.current.high) b.current.high = price;
         if (price < b.current.low)  b.current.low  = price;
         b.current.close   = price;
         b.current.volume += 1;
-
-        // Log tick details at debug level for the 1m interval only
-        // (logging all 9 intervals would be prohibitively verbose)
-        if (interval === "1") {
-          logger.debug({
-            symbol,
-            timestamp: tsMs,
-            price,
-            candleStart: b.current.time,
-            open:  b.current.open,
-            high:  b.current.high,
-            low:   b.current.low,
-            close: b.current.close,
-          }, "CandleAggregator: tick");
-        }
       }
 
       this.emit("candle_update", { symbol, interval, bar: { ...b.current } });
     }
+  }
+
+  /**
+   * Replace/synchronize a candle with an authoritative cTrader OHLC bar.
+   * cTrader trendbars are the broker's canonical 1m OHLC and are therefore
+   * used to correct the locally tick-aggregated candle. Subsequent ticks can
+   * continue updating the same active candle normally.
+   */
+  applyAuthoritativeBar(symbol: string, interval: CandleInterval, bar: OHLCBar): void {
+    if (!Number.isFinite(bar.time) || bar.time <= 0) return;
+    if (!Number.isFinite(bar.open) || !Number.isFinite(bar.high) ||
+        !Number.isFinite(bar.low) || !Number.isFinite(bar.close) ||
+        bar.low <= 0 || bar.high < bar.low) return;
+
+    const b = this.getOrCreate(symbol, interval);
+    const normalized: OHLCBar = {
+      time: Math.floor(bar.time),
+      open: bar.open,
+      high: Math.max(bar.high, bar.open, bar.close),
+      low: Math.min(bar.low, bar.open, bar.close),
+      close: bar.close,
+      volume: Math.max(0, Number.isFinite(bar.volume) ? bar.volume : 0),
+    };
+
+    // If the broker has moved to a later bar, preserve the local previous bar
+    // only when it is not already represented by the authoritative data.
+    if (b.current && normalized.time > b.current.time) {
+      const previous = b.current;
+      if (!b.completed.some(x => x.time === previous.time)) {
+        b.completed.push({ ...previous });
+      }
+    }
+
+    // A trendbar returned by cTrader is the canonical OHLC for that bar. It can
+    // safely replace either the active bar or an existing completed copy.
+    b.completed = b.completed.filter(x => x.time !== normalized.time);
+    if (b.current?.time === normalized.time) {
+      b.current = normalized;
+    } else if (!b.current || normalized.time > b.current.time) {
+      b.current = normalized;
+    } else {
+      b.completed.push(normalized);
+    }
+
+    b.completed.sort((a, c) => a.time - c.time);
+    if (b.completed.length > MAX_BARS) b.completed.splice(0, b.completed.length - MAX_BARS);
+
+    this.emit("candle_update", { symbol, interval, bar: { ...(b.current?.time === normalized.time ? b.current : normalized) } });
   }
 
   getBars(symbol: string, interval: CandleInterval): OHLCBar[] {
