@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
 import { logger } from "../lib/logger.js";
 import { isPinConfigured, verifyToken } from "../routes/auth.js";
+import { ctraderTickEngine } from "../services/CtraderTickEngine.js";
 
 export type WSMessage = Record<string, unknown> & { type: string };
 
@@ -141,6 +142,13 @@ export class WSManager {
 
       this.send(ws, { type: "welcome", message: "Connected to TradeVault live feed" });
 
+      // cTrader status is normally broadcast only when the engine changes state.
+      // A browser can connect after the engine is already streaming, which left
+      // ctraderSpotStore at its initial "unknown" state. Replay the current
+      // engine snapshot immediately so new clients always know the real state.
+      const ctraderStatus = ctraderTickEngine.getStatus();
+      this.send(ws, { type: "ctrader_status", ...ctraderStatus });
+
       ws.on("message", (raw) => {
         try {
           const msg = JSON.parse(raw.toString()) as {
@@ -152,6 +160,10 @@ export class WSManager {
 
           if (msg.type === "ping") {
             this.send(ws, { type: "pong" });
+            // Also refresh cTrader state on heartbeat so a reconnect that lands
+            // between engine transitions cannot remain stale in the UI.
+            const currentCtraderStatus = ctraderTickEngine.getStatus();
+            this.send(ws, { type: "ctrader_status", ...currentCtraderStatus });
           } else if (msg.type === "subscribe_candles") {
             const sym = String(msg.symbol ?? "").trim();
             const iv = String(msg.interval ?? "").trim();
