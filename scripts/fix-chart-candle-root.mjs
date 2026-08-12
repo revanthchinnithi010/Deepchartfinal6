@@ -15,9 +15,9 @@ const oldFresh = `      const lastCached = cached?.[cached.length - 1];
         applyBarArray(bars, sym, iv);
       }`;
 
-const newFresh = `      // Compare the complete OHLC dataset, not only the last candle.
-      // The old check could keep stale historical candles when the newest
-      // candle was unchanged, leaving the chart visually incorrect.
+const newFresh = `      // Compare the complete OHLCV dataset, not only the last candle.
+      // A historical candle can be corrected while the newest candle remains
+      // unchanged; the old shortcut therefore kept stale OHLC data on screen.
       const sameData = !!cached && cached.length === bars.length && cached.every((c, i) => {
         const f = bars[i];
         return !!f &&
@@ -45,42 +45,28 @@ const oldScale = `        if (typeof saved.priceMin === "number" && typeof saved
           });
         }`;
 
-const newScale = `        // Restore a saved manual vertical range only when it is still sane for
-        // the freshly fetched dataset. A stale/wide saved range can lock the
-        // price scale far outside the current candles and collapse 1m bodies
-        // into horizontal dash-like marks.
-        if (typeof saved.priceMin === "number" && typeof saved.priceMax === "number") {
-          const dataMin = safeBars.reduce((m, b) => Math.min(m, b.low), Infinity);
-          const dataMax = safeBars.reduce((m, b) => Math.max(m, b.high), -Infinity);
-          const dataSpan = dataMax - dataMin;
-          const savedSpan = saved.priceMax - saved.priceMin;
-          const lastCloseForRange = safeBars[safeBars.length - 1]?.close ?? 0;
-          const maxReasonableSpan = Math.max(dataSpan * 4, Math.abs(lastCloseForRange) * 0.01);
-          const savedRangeValid =
-            Number.isFinite(saved.priceMin) &&
-            Number.isFinite(saved.priceMax) &&
-            saved.priceMax > saved.priceMin &&
-            saved.priceMin <= lastCloseForRange &&
-            saved.priceMax >= lastCloseForRange &&
-            dataSpan > 0 &&
-            savedSpan <= maxReasonableSpan;
+const newScale = `        // Do not restore a persisted manual vertical range from an older
+        // chart session. That range is not part of historical OHLC data and can
+        // lock the price scale to a stale coordinate system, making valid candle
+        // bodies collapse into dash-like marks. Historical OHLC must determine
+        // the initial price scale; manual panning can be recreated by the user.
+        activatePanRange(null);
+        cs.applyOptions({ autoscaleInfoProvider: () => null });
+        try { chart.priceScale("right").applyOptions({ autoScale: true }); } catch { }
 
-          if (savedRangeValid) {
-            activatePanRange({ lo: saved.priceMin, hi: saved.priceMax });
-            cs.applyOptions({
-              autoscaleInfoProvider: () => ({
-                priceRange: { minValue: saved.priceMin!, maxValue: saved.priceMax! },
-              }),
-            });
-          } else {
-            activatePanRange(null);
-            cs.applyOptions({ autoscaleInfoProvider: () => null });
-            try { chart.priceScale("right").applyOptions({ autoScale: true }); } catch { }
+        // Remove the obsolete persisted price range so the bad state cannot
+        // return on the next symbol/interval load.
+        try {
+          const rawVp = JSON.parse(localStorage.getItem(vpKey) ?? "null");
+          if (rawVp && ("priceMin" in rawVp || "priceMax" in rawVp)) {
+            delete rawVp.priceMin;
+            delete rawVp.priceMax;
+            localStorage.setItem(vpKey, JSON.stringify(rawVp));
           }
-        }`;
+        } catch { }`;
 
 if (!text.includes(oldScale)) throw new Error("Saved vertical-range block not found");
 text = text.replace(oldScale, newScale);
 
 fs.writeFileSync(file, text);
-console.log("[chart-fix] CustomChart.tsx patched for full OHLC refresh + stale vertical-scale protection");
+console.log("[chart-fix] Applied full-OHLC refresh + clean historical autoscale protection");
