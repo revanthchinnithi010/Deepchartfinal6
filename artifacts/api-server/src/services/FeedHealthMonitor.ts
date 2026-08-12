@@ -81,11 +81,28 @@ export class FeedHealthMonitor {
       const lastAt = this.lastTickAt.get(sym) ?? null;
       const price = this.lastPrice.get(sym) ?? null;
       const neverReceived = lastAt === null;
-      const isStale = !neverReceived && (now - lastAt!) > STALE_THRESHOLD_MS;
-      const staleSinceMs = isStale ? now - lastAt! : null;
       const provider = this.marketData.getProviderForSymbol(sym) ?? "unknown";
 
-      symbolHealth[sym] = { symbol: sym, provider, lastTickAt: lastAt, lastPrice: price, isStale, staleSinceMs, neverReceived };
+      // A cTrader spot subscription is not a continuous heartbeat. cTrader's
+      // first spot event contains the latest quote and, when the market is
+      // closed, the API may send only that single event. Therefore a missing
+      // cTrader tick must NOT be treated as a broken feed or used to trigger a
+      // Telegram stale-feed alert. Connection health is handled by the
+      // dedicated cTrader engine status stream instead.
+      const isCtrader = provider.toLowerCase() === "ctrader";
+      const isStale = !isCtrader && !neverReceived && (now - lastAt!) > STALE_THRESHOLD_MS;
+      const staleSinceMs = isStale ? now - lastAt! : null;
+
+      symbolHealth[sym] = {
+        symbol: sym,
+        provider,
+        lastTickAt: lastAt,
+        lastPrice: price,
+        isStale,
+        staleSinceMs,
+        neverReceived,
+      };
+
       if (isStale) staleCount++;
       else if (!neverReceived) activeCount++;
     }
@@ -103,6 +120,16 @@ export class FeedHealthMonitor {
 
   private checkStaleAlerts(health: FeedHealth): void {
     for (const [sym, sh] of Object.entries(health.symbols)) {
+      // Never send symbol-level stale Telegram alerts for cTrader. A cTrader
+      // spot stream can legitimately have no new tick for a period, including
+      // when a market/session is closed. The dedicated cTrader connection
+      // status is the correct signal for an actual feed outage.
+      const isCtrader = sh.provider.toLowerCase() === "ctrader";
+      if (isCtrader) {
+        this.staleAlertSent.delete(sym);
+        continue;
+      }
+
       if (sh.isStale && !sh.neverReceived && !this.staleAlertSent.has(sym)) {
         this.staleAlertSent.add(sym);
         this.telegram
