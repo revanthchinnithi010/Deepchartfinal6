@@ -283,8 +283,8 @@ function calcPriceScaleW(price: number, sym: string): number {
 }
 
 const PRICE_SCALE_TOUCH_W = 130; // generous max — covers even sub-micro meme coins
-const DEFAULT_VISIBLE_BARS   = 150; // TradingView-style default: show ~150 recent bars on fresh load
-const MIN_FUTURE_BARS        = 50;  // always keep 50 bars of future space on the right
+const DEFAULT_VISIBLE_BARS   = 90; // TradingView-style default: show ~150 recent bars on fresh load
+const MIN_FUTURE_BARS        = 12;  // always keep 50 bars of future space on the right
 const HISTORY_PREFETCH_BARS  = 150; // trigger history fetch when within this many bars of the left edge
 const MAX_TOTAL_BARS         = 10_000; // stop loading when we reach this many bars (matches cTrader/TradingView limit)
 
@@ -1372,12 +1372,12 @@ const CustomChart = memo(function CustomChart({
         borderColor:     "rgba(57,91,67,0.35)",
         timeVisible:     true,
         secondsVisible:  false,
-        rightOffset:     40,
+        rightOffset:     10,
         // Keep 1m candles physically readable on mobile instead of allowing
         // hundreds of loaded bars to collapse into 1px dash/wick marks.
         // Users can still zoom further out/in with the time-scale controls.
         barSpacing:      8,
-        minBarSpacing:   2.5,
+        minBarSpacing:   4,
         fixLeftEdge:     false,
         fixRightEdge:    false,
         tickMarkFormatter: (time: number, type: TickMarkType) => {
@@ -1502,7 +1502,7 @@ const CustomChart = memo(function CustomChart({
         const pr = getPanRange();
         const vp: Record<string, number> = { from: range.from, to: range.to };
         if (pr) { vp.priceMin = pr.lo; vp.priceMax = pr.hi; }
-        localStorage.setItem(`tv_vp_${symRef.current}_${ivRef.current}`, JSON.stringify(vp));
+        localStorage.setItem(`tv_vp_v2_${symRef.current}_${ivRef.current}`, JSON.stringify(vp));
       } catch { /* ok */ }
     };
     const schedSaveVp = () => {
@@ -3148,7 +3148,7 @@ const CustomChart = memo(function CustomChart({
     activatePanRange(null);
 
     const lastBarIdx = safeBars.length - 1;
-    const vpKey      = `tv_vp_${sym}_${iv}`;
+    const vpKey      = `tv_vp_v2_${sym}_${iv}`;
     const defaultRange = {
       from: Math.max(0, lastBarIdx - DEFAULT_VISIBLE_BARS + 1),
       to:   lastBarIdx + MIN_FUTURE_BARS,
