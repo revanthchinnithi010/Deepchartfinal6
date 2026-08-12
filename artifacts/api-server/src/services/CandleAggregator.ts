@@ -16,6 +16,17 @@ export type CandleInterval = "1" | "3" | "5" | "15" | "30" | "60" | "240" | "D" 
 const SUPPORTED_INTERVALS: CandleInterval[] = ["1", "3", "5", "15", "30", "60", "240", "D", "W"];
 const MAX_BARS = 500;
 
+// cTrader historical trendbars are the authoritative source for chart history.
+// The local tick aggregator is only needed for the currently forming candle.
+// Returning all locally completed candles here would cause candles.ts to merge
+// them over the exact cTrader OHLC history and distort historical formation.
+const CTRADER_SYMBOLS = new Set([
+  "NAS100", "US30", "US500", "SPX500", "GER40", "DE40", "UK100", "JP225",
+  "XAUUSD", "XAGUSD", "USOIL", "UKOIL", "NATGAS",
+  "EURUSD", "GBPUSD", "GBPJPY", "USDJPY", "AUDUSD", "USDCAD", "USDCHF",
+  "EURGBP", "EURJPY", "EURAUD", "GBPAUD", "NZDUSD",
+]);
+
 function getBarStartSec(timestampMs: number, interval: CandleInterval): number {
   if (interval === "D") {
     const d = new Date(timestampMs);
@@ -142,6 +153,14 @@ export class CandleAggregator extends EventEmitter {
   getBars(symbol: string, interval: CandleInterval): OHLCBar[] {
     const b = this.buckets.get(this.key(symbol, interval));
     if (!b) return [];
+
+    // cTrader chart history must remain broker-authoritative. Only expose the
+    // currently forming local candle to the API merge layer; all completed bars
+    // remain internal and must never overwrite cTrader trendbars.
+    if (CTRADER_SYMBOLS.has(symbol.toUpperCase())) {
+      return b.current ? [{ ...b.current }] : [];
+    }
+
     const all = b.current ? [...b.completed, b.current] : [...b.completed];
     return all.slice(-MAX_BARS);
   }
