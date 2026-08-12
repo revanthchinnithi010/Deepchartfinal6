@@ -1,7 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const file = path.resolve("artifacts/trading-journal/src/components/charts/CustomChart.tsx");
+// This script is invoked in two different working directories by Railway:
+// 1) repo root from the Nixpacks build command
+// 2) artifacts/trading-journal from the package's prebuild script
+// Resolve the repository root from this file instead of process.cwd().
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(scriptDir, "..");
+const file = path.join(repoRoot, "artifacts/trading-journal/src/components/charts/CustomChart.tsx");
+
 let text = fs.readFileSync(file, "utf8");
 
 const oldFresh = `      const lastCached = cached?.[cached.length - 1];
