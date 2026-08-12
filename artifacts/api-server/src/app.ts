@@ -48,14 +48,14 @@ export function createApp(deps: {
   app.set("trust proxy", 1);
 
   // CORS is deliberately exact-origin for Railway deployments. Set
-  // CORS_ALLOWED_ORIGINS to the frontend origin(s), comma-separated, e.g.
-  // https://deepcharts-production.up.railway.app
-  // Do not use a *.railway.app wildcard: another Railway app must never be
-  // treated as an allowed browser origin for this private API.
+  // CORS_ALLOWED_ORIGINS to the frontend origin(s), comma-separated.
+  // The current production frontend is included explicitly so the API works
+  // immediately after deployment without requiring a second CORS change.
   const allowedOrigins = new Set<string>([
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:5173",
+    "https://workspacetrading-journal-production-ef57.up.railway.app",
     ...((process.env["CORS_ALLOWED_ORIGINS"] ?? "")
       .split(",")
       .map((o) => o.trim().replace(/\/+$/, ""))
