@@ -32,13 +32,21 @@ export class WSManager {
   private wss: WebSocketServer;
   private clients: Set<WebSocket> = new Set();
   private clientState: Map<WebSocket, ClientState> = new Map();
-
-  /** Pre-serialized cache: key → JSON string, invalidated on each new candle event */
   private candlePayloadCache: Map<string, string> = new Map();
+  private subscribeSymbolHandler: ((symbol: string) => boolean) | null = null;
 
   constructor() {
     this.wss = new WebSocketServer({ noServer: true });
     this.setupServer();
+  }
+
+  /**
+   * Connect the browser chart subscription to the actual market-data router.
+   * A chart can be opened for a symbol that is not saved in the watchlist;
+   * that symbol still needs a live provider subscription.
+   */
+  setSymbolSubscribeHandler(handler: (symbol: string) => boolean): void {
+    this.subscribeSymbolHandler = handler;
   }
 
   handleUpgrade(req: IncomingMessage, socket: import("net").Socket, head: Buffer): void {
@@ -56,9 +64,6 @@ export class WSManager {
       return;
     }
 
-    // The browser WebSocket API cannot attach an Authorization header. The
-    // frontend therefore sends the signed PIN token as a short-lived query
-    // parameter during the upgrade. Never log the URL/token.
     if (isPinConfigured() && !verifyToken(getWsAuthToken(req))) {
       logger.warn({ ip: req.socket.remoteAddress ?? "unknown" }, "WSManager: rejected unauthenticated WebSocket upgrade");
       rejectUpgrade(socket);
@@ -70,7 +75,6 @@ export class WSManager {
     });
   }
 
-  /** Broadcast a message to ALL connected clients. */
   broadcast(msg: WSMessage): void {
     const payload = JSON.stringify(msg);
     let sent = 0;
@@ -80,24 +84,16 @@ export class WSManager {
         sent++;
       }
     }
-    if (sent > 0) {
-      logger.debug({ type: msg.type, recipients: sent }, "WSManager: broadcast");
-    }
+    if (sent > 0) logger.debug({ type: msg.type, recipients: sent }, "WSManager: broadcast");
   }
 
-  /**
-   * Per-client candle broadcast. Each client declares the one symbol:interval
-   * it cares about via "subscribe_candles".
-   */
   broadcastCandleUpdate(symbol: string, interval: string, bar: object): void {
     if (this.clients.size === 0) return;
-
     const key = `${symbol}:${interval}`;
     let payload: string | undefined;
 
     for (const client of this.clients) {
       if (client.readyState !== WebSocket.OPEN) continue;
-
       const state = this.clientState.get(client);
       const candKey = state?.candleKey ?? null;
       if (candKey !== null && candKey !== key) continue;
@@ -109,24 +105,17 @@ export class WSManager {
           this.candlePayloadCache.set(key, payload);
         }
       }
-
       client.send(payload);
     }
   }
 
-  clearCandleCache(): void {
-    this.candlePayloadCache.clear();
-  }
+  clearCandleCache(): void { this.candlePayloadCache.clear(); }
 
   send(ws: WebSocket, msg: WSMessage): void {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(msg));
-    }
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   }
 
-  getClientCount(): number {
-    return this.clients.size;
-  }
+  getClientCount(): number { return this.clients.size; }
 
   private setupServer(): void {
     this.wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
@@ -135,13 +124,8 @@ export class WSManager {
 
       const ip = req.socket.remoteAddress ?? "unknown";
       logger.info({ ip, total: this.clients.size }, "WSManager: client connected");
-
       this.send(ws, { type: "welcome", message: "Connected to TradeVault live feed" });
 
-      // cTrader status is normally broadcast only when the engine changes state.
-      // A browser can connect after the engine is already streaming, which left
-      // ctraderSpotStore at its initial "unknown" state. Replay the current
-      // engine snapshot immediately so new clients always know the real state.
       const ctraderStatus = ctraderTickEngine.getStatus();
       this.send(ws, { type: "ctrader_status", ...ctraderStatus });
 
@@ -156,20 +140,33 @@ export class WSManager {
 
           if (msg.type === "ping") {
             this.send(ws, { type: "pong" });
-            // Also refresh cTrader state on heartbeat so a reconnect that lands
-            // between engine transitions cannot remain stale in the UI.
             const currentCtraderStatus = ctraderTickEngine.getStatus();
             this.send(ws, { type: "ctrader_status", ...currentCtraderStatus });
-          } else if (msg.type === "subscribe_candles") {
-            const sym = String(msg.symbol ?? "").trim();
+            return;
+          }
+
+          if (msg.type === "subscribe_candles") {
+            const sym = String(msg.symbol ?? "").toUpperCase().trim();
             const iv = String(msg.interval ?? "").trim();
-            if (sym && iv) {
-              const newKey = `${sym}:${iv}`;
-              const state = this.clientState.get(ws);
-              if (state) {
-                state.candleKey = newKey;
-                logger.info({ ip, candleKey: newKey }, "WSManager: client subscribed to candles");
-              }
+            if (!sym || !iv) return;
+
+            // IMPORTANT: this is the missing live-feed link. Previously this
+            // message only filtered candle_update broadcasts. It did NOT tell
+            // MarketDataService to subscribe the symbol, so arbitrary chart
+            // symbols such as FARTCOINUSD could show historical candles forever
+            // while receiving zero live ticks.
+            const subscribed = this.subscribeSymbolHandler?.(sym) ?? false;
+            if (!subscribed) {
+              logger.warn({ ip, symbol: sym }, "WSManager: chart symbol live subscription not accepted yet");
+            } else {
+              logger.info({ ip, symbol: sym }, "WSManager: chart symbol subscribed to live feed");
+            }
+
+            const newKey = `${sym}:${iv}`;
+            const state = this.clientState.get(ws);
+            if (state) {
+              state.candleKey = newKey;
+              logger.info({ ip, candleKey: newKey }, "WSManager: client subscribed to candles");
             }
           }
         } catch {
@@ -189,20 +186,9 @@ export class WSManager {
         this.clientState.delete(ws);
       });
 
-      // The browser's WebSocket implementation automatically answers protocol
-      // ping frames with pong frames. Do not use those protocol pongs as the
-      // application's connection watchdog: Railway/mobile proxies can delay or
-      // consume control frames even while normal WebSocket data is flowing.
-      // The frontend already has an application-level ping/pong watchdog.
-      ws.on("pong", () => {
-        logger.debug({ ip }, "WSManager: pong");
-      });
+      ws.on("pong", () => logger.debug({ ip }, "WSManager: pong"));
     });
 
-    // Keep the TCP/WebSocket connection active with protocol-level pings, but
-    // NEVER terminate a client solely because a protocol pong was delayed.
-    // The previous pendingPongs timeout was causing healthy mobile clients to
-    // appear as "Feed Offline" after ~20–30 seconds on Railway/cellular networks.
     const pingInterval = setInterval(() => {
       for (const client of this.clients) {
         if (client.readyState === WebSocket.OPEN) {
