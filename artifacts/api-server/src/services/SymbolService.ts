@@ -25,7 +25,6 @@ interface DeltaProduct {
 const DELTA_INDIA_REST = "https://api.india.delta.exchange";
 const CACHE_TTL_MS = 10 * 60 * 1_000;
 
-// Delta contract_type → normalized category
 const CONTRACT_CATEGORY: Record<string, SymbolCategory> = {
   perpetual_futures: "perpetual",
   futures:           "future",
@@ -35,7 +34,6 @@ const CONTRACT_CATEGORY: Record<string, SymbolCategory> = {
   spot:              "spot",
 };
 
-// Include these contract types in the catalog
 const INCLUDED_TYPES = new Set([
   "perpetual_futures",
   "futures",
@@ -47,8 +45,8 @@ interface DeltaCacheEntry {
 }
 
 export class SymbolService {
-  private deltaCache:    DeltaCacheEntry | null = null;
-  private fetchPromise:  Promise<SymbolInfo[]>  | null = null;
+  private deltaCache:   DeltaCacheEntry | null = null;
+  private fetchPromise: Promise<SymbolInfo[]> | null = null;
 
   async getDeltaSymbols(forceRefresh = false): Promise<SymbolInfo[]> {
     if (!forceRefresh && this.deltaCache && Date.now() - this.deltaCache.fetchedAt < CACHE_TTL_MS) {
@@ -74,25 +72,16 @@ export class SymbolService {
       const url = `${DELTA_INDIA_REST}/v2/products?states=live`;
       const resp = await fetch(url, {
         signal: AbortSignal.timeout(12_000),
-        headers: {
-          "Accept": "application/json",
-          "User-Agent": "TradeVault/1.0",
-        },
+        headers: { "Accept": "application/json", "User-Agent": "TradeVault/1.0" },
       });
 
-      if (!resp.ok) {
-        throw new Error(`Delta India REST returned HTTP ${resp.status}`);
-      }
+      if (!resp.ok) throw new Error(`Delta India REST returned HTTP ${resp.status}`);
 
       const body = await resp.json() as { result?: DeltaProduct[]; success?: boolean };
       const products: DeltaProduct[] = Array.isArray(body.result) ? body.result : [];
 
       const symbols: SymbolInfo[] = products
-        .filter(p =>
-          INCLUDED_TYPES.has(p.contract_type) &&
-          p.trading_status === "operational" &&
-          p.symbol,
-        )
+        .filter(p => INCLUDED_TYPES.has(p.contract_type) && p.trading_status === "operational" && p.symbol)
         .map(p => ({
           symbol:       p.symbol,
           name:         p.description ?? p.symbol,
@@ -100,10 +89,9 @@ export class SymbolService {
           category:     CONTRACT_CATEGORY[p.contract_type] ?? "other",
           broker:       "delta",
           underlying:   p.underlying_asset?.symbol ?? p.symbol.replace(/USDT?$/, ""),
-          quoteAsset:   p.settling_asset?.symbol ?? "USDT",
+          quoteAsset:   p.settling_asset?.symbol ?? "USD",
           active:       true,
         }))
-        // Sort: perpetuals first (by name), then futures (by name)
         .sort((a, b) => {
           if (a.category !== b.category) {
             const order: SymbolCategory[] = ["perpetual", "future", "option", "spot", "other"];
@@ -113,24 +101,22 @@ export class SymbolService {
         });
 
       logger.info({ count: symbols.length }, "SymbolService: Delta India symbols loaded");
-
       this.deltaCache = { symbols, fetchedAt: Date.now() };
       return symbols;
     } catch (err) {
       logger.error({ err }, "SymbolService: failed to fetch Delta India symbols — returning cached or fallback");
-
       if (this.deltaCache) return this.deltaCache.symbols;
-
       return this._fallbackDeltaSymbols();
     }
   }
 
   private _fallbackDeltaSymbols(): SymbolInfo[] {
     logger.warn("SymbolService: using hardcoded Delta India fallback symbols (API unreachable)");
+    // Delta Exchange India contracts are USD-quoted (BTCUSD, ETHUSD, ...).
     const fallback = [
-      "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
-      "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT",
-      "LINKUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", "NEARUSDT",
+      "BTCUSD", "ETHUSD", "SOLUSD", "BNBUSD", "XRPUSD",
+      "ADAUSD", "DOGEUSD", "AVAXUSD", "DOTUSD", "MATICUSD",
+      "LINKUSD", "LTCUSD", "UNIUSD", "ATOMUSD", "NEARUSD",
     ];
     return fallback.map(sym => ({
       symbol:       sym,
@@ -139,7 +125,7 @@ export class SymbolService {
       category:     "perpetual" as SymbolCategory,
       broker:       "delta",
       underlying:   sym.replace(/USDT?$/, ""),
-      quoteAsset:   "USDT",
+      quoteAsset:   "USD",
       active:       true,
     }));
   }
