@@ -3,85 +3,80 @@ import { BaseProvider, type ProviderTick } from "./BaseProvider.js";
 import { logger } from "../../lib/logger.js";
 
 /**
- * Delta Exchange India — perpetual futures market data provider.
+ * Delta Exchange India real-time market-data provider.
  *
- * WS endpoint: wss://socket.india.delta.exchange
- * Channels:
- *   - all_trades  → fires on EVERY executed trade (sub-second during active markets)
- *   - v2/ticker   → full ticker snapshot every ~5s (volume, spread, mark price, bid/ask)
+ * IMPORTANT: Delta migrated public market-data channels to the public socket
+ * endpoint in 2026. The legacy `all_trades` / `v2/ticker` channels are no
+ * longer used here. We consume:
+ *   - `trades`  -> every executed trade; PRIMARY OHLC tick source
+ *   - `ticker`  -> ~5s quote snapshot; live-price metadata only
  *
- * `all_trades` is the primary real-time tick source for OHLC candles.
- * `v2/ticker` is a quote/mark snapshot used as a live-price fallback only;
- * it is deliberately excluded from OHLC candle formation.
- *
- * Timestamp normalization:
- *   Delta India sends microsecond timestamps (1.78e15 for 2026).
- *   > 1e15 → microseconds → divide by 1000 → milliseconds (for CandleAggregator)
- *   > 1e12 → already milliseconds → use as-is
- *   Fallback → Date.now() (milliseconds)
+ * Delta product symbols are USD quoted (e.g. BTCUSD, FARTCOINUSD). Keep the
+ * app's internal symbol unchanged; do not convert USD -> USDT.
  */
 
-const DELTA_INDIA_WS   = "wss://socket.india.delta.exchange";
+const DELTA_INDIA_WS = "wss://public-socket.india.delta.exchange";
 const PING_INTERVAL_MS = 20_000;
 
-interface DeltaFlatMsg {
-  type:              string;
-  symbol?:           string;
-  price?:            string | number;
-  mark_price?:       string | number;
-  close?:            string | number;
-  spot_price?:       string | number;
-  best_bid?:         string | number;
-  best_ask?:         string | number;
-  size?:             number | string;
-  volume?:           string | number;
-  turnover_usd?:     string | number;
-  timestamp?:        number;
-  buyer_role?:       string;
-  high?:             string | number;
-  low?:              string | number;
-  open?:             string | number;
-  mark_change_24h?:  string | number;
+interface DeltaTradeMsg {
+  type: "trades";
+  p?: string | number; // trade price
+  s?: string | number; // trade size
+  sy?: string;         // symbol
+  t?: number;          // trade timestamp, microseconds
+  ts?: number;         // server publish timestamp, microseconds
+  r?: string;
+}
+
+interface DeltaTickerMsg {
+  type: "ticker";
+  sy?: string;
+  ts?: number;
+  sp?: string | number;
+  d?: Array<{
+    s?: string;
+    m?: string | number; // mark price
+    m24hc?: string | number;
+    ohlc?: Array<string | number>;
+    q?: Array<string | number | null>;
+    to?: Array<string | number>;
+  }>;
 }
 
 function parsePrice(v: string | number | undefined | null): number {
   if (v === undefined || v === null) return NaN;
   const n = typeof v === "number" ? v : parseFloat(v);
-  return isNaN(n) || n <= 0 ? NaN : n;
+  return Number.isFinite(n) && n > 0 ? n : NaN;
 }
 
-/**
- * Normalize Delta India timestamp to milliseconds.
- * Delta India uses microseconds (16-digit numbers in 2026).
- */
+/** Delta publishes timestamps in microseconds. Normalize everything to ms. */
 function normToMs(ts: number | undefined): number {
-  if (!ts) return Date.now();
-  if (ts > 1e15) return Math.floor(ts / 1_000);   // microseconds → ms
-  if (ts > 1e12) return ts;                         // already ms
-  return ts * 1_000;                                // seconds → ms
+  if (!Number.isFinite(ts) || !ts) return Date.now();
+  if (ts > 1e15) return Math.floor(ts / 1_000);
+  if (ts > 1e12) return Math.floor(ts);
+  return Math.floor(ts * 1_000);
 }
 
 export interface DeltaSymbolEntry {
   internalSymbol: string;
-  deltaSymbol:    string;
+  deltaSymbol: string;
 }
 
 export class DeltaExchangeProvider extends BaseProvider {
-  readonly name        = "delta";
+  readonly name = "delta";
   readonly displayName = "Delta Exchange India";
-  readonly badge       = "delta";
-  readonly color       = "#8B5CF6";
+  readonly badge = "delta";
+  readonly color = "#8B5CF6";
 
-  private internalToDelta: Map<string, string> = new Map();
-  private deltaToInternal: Map<string, string> = new Map();
+  private internalToDelta = new Map<string, string>();
+  private deltaToInternal = new Map<string, string>();
+  private ws: WebSocket | null = null;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private subscribedDelta = new Set<string>();
 
   get supportedSymbols(): string[] {
     return [...this.internalToDelta.keys()];
   }
-
-  private ws:              WebSocket | null = null;
-  private pingTimer:       ReturnType<typeof setInterval> | null = null;
-  private subscribedDelta: Set<string> = new Set();
 
   constructor(entries: DeltaSymbolEntry[]) {
     super();
@@ -91,29 +86,32 @@ export class DeltaExchangeProvider extends BaseProvider {
   private _loadSymbols(entries: DeltaSymbolEntry[]): void {
     this.internalToDelta.clear();
     this.deltaToInternal.clear();
-    for (const { internalSymbol, deltaSymbol } of entries) {
-      this.internalToDelta.set(internalSymbol, deltaSymbol);
-      this.deltaToInternal.set(deltaSymbol, internalSymbol);
+
+    for (const entry of entries) {
+      const internal = entry.internalSymbol.toUpperCase();
+      const delta = entry.deltaSymbol.toUpperCase();
+      if (!internal || !delta) continue;
+      this.internalToDelta.set(internal, delta);
+      this.deltaToInternal.set(delta, internal);
     }
+
     logger.info(
       { count: entries.length, provider: this.name },
       "DeltaExchangeProvider: symbol map loaded",
     );
   }
 
-  /**
-   * Hot-reload symbol catalog without dropping the WS connection.
-   * New symbols will be subscribed immediately if the socket is open.
-   */
   refreshSymbols(entries: DeltaSymbolEntry[]): void {
-    const prevInternal = new Set(this.internalToDelta.keys());
+    const previousSubscriptions = new Set(this.subscriptions);
     this._loadSymbols(entries);
 
     if (this.ws?.readyState !== WebSocket.OPEN) return;
 
-    for (const { internalSymbol, deltaSymbol } of entries) {
-      if (!prevInternal.has(internalSymbol) && this.subscriptions.has(internalSymbol)) {
-        this._sendSubscribe(deltaSymbol);
+    // Re-subscribe using the refreshed exchange symbol map. This is important
+    // because the catalog can be loaded after the socket was already opened.
+    for (const internal of previousSubscriptions) {
+      if (this.internalToDelta.has(internal)) {
+        this.subscribeSymbol(internal);
       }
     }
   }
@@ -124,11 +122,15 @@ export class DeltaExchangeProvider extends BaseProvider {
     this.clearPing();
     this.subscribedDelta.clear();
 
-    logger.info({ provider: this.name, url: DELTA_INDIA_WS }, "DeltaExchangeProvider: connecting");
+    logger.info(
+      { provider: this.name, url: DELTA_INDIA_WS },
+      "DeltaExchangeProvider: connecting to public market-data socket",
+    );
+
     this.ws = new WebSocket(DELTA_INDIA_WS, { handshakeTimeout: 10_000 });
 
     this.ws.on("open", () => {
-      logger.info({ provider: this.name }, "DeltaExchangeProvider: WS open — subscribing all pending");
+      logger.info({ provider: this.name }, "DeltaExchangeProvider: public WS open");
       this.onConnected();
 
       this.pingTimer = setInterval(() => {
@@ -140,123 +142,159 @@ export class DeltaExchangeProvider extends BaseProvider {
       logger.debug({ provider: this.name }, "DeltaExchangeProvider: pong");
     });
 
-    this.ws.on("message", (raw) => {
+    this.ws.on("message", raw => {
       const str = raw.toString();
       try {
-        const msg = JSON.parse(str) as DeltaFlatMsg;
+        const msg = JSON.parse(str) as Record<string, unknown>;
 
         if (msg.type === "subscriptions") {
-          logger.info({ provider: this.name, raw: str.slice(0, 300) }, "DeltaExchangeProvider: subscriptions ack");
+          logger.info(
+            { provider: this.name, raw: str.slice(0, 500) },
+            "DeltaExchangeProvider: subscription acknowledged",
+          );
           return;
         }
-        if (msg.type === "heartbeat") return;
+
+        if (msg.type === "heartbeat" || msg.type === "pong") return;
+
         if (msg.type === "error") {
-          logger.warn({ provider: this.name, raw: str.slice(0, 400) }, "DeltaExchangeProvider: server error msg");
+          logger.warn(
+            { provider: this.name, raw: str.slice(0, 500) },
+            "DeltaExchangeProvider: server error",
+          );
           return;
         }
 
-        // ── all_trades: fires on EVERY executed trade — primary candle source ──
-        if (msg.type === "all_trades" && msg.symbol) {
-          const internalSym = this.deltaToInternal.get(msg.symbol);
-          if (!internalSym) return;
+        // ── New public `trades` channel: every executed trade ───────────────
+        if (msg.type === "trades") {
+          const trade = msg as unknown as DeltaTradeMsg;
+          const deltaSym = trade.sy?.toUpperCase();
+          if (!deltaSym) return;
 
-          const price = parsePrice(msg.price);
+          const internalSym = this.deltaToInternal.get(deltaSym);
+          if (!internalSym) {
+            logger.debug(
+              { provider: this.name, deltaSym },
+              "DeltaExchangeProvider: trade for unmapped symbol",
+            );
+            return;
+          }
+
+          const price = parsePrice(trade.p);
           if (isNaN(price)) return;
 
-          const rawSize = typeof msg.size === "string" ? parseFloat(msg.size) : (msg.size ?? 0);
-          const volume  = isNaN(rawSize as number) ? 0 : (rawSize as number);
-
-          // Delta India sends microsecond timestamps — normalize to ms
-          const tsMs = normToMs(msg.timestamp);
+          const rawSize = typeof trade.s === "string" ? parseFloat(trade.s) : (trade.s ?? 0);
+          const volume = Number.isFinite(rawSize) ? rawSize : 0;
+          const tsMs = normToMs(trade.t ?? trade.ts);
 
           logger.debug(
-            { provider: this.name, symbol: internalSym, price, deltaSym: msg.symbol },
-            "DeltaExchangeProvider: all_trades tick",
+            { provider: this.name, symbol: internalSym, price, deltaSym, tsMs },
+            "DeltaExchangeProvider: trade tick",
           );
-          this._emitTick(internalSym, msg.symbol, price, volume, tsMs, undefined, undefined, undefined, "trade");
+
+          this._emitTick(
+            internalSym,
+            deltaSym,
+            price,
+            volume,
+            tsMs,
+            undefined,
+            undefined,
+            undefined,
+            "trade",
+          );
           return;
         }
 
-        // ── v2/ticker: quote snapshot every ~5s — live price fallback only ─────
-        if ((msg.type === "v2/ticker" || msg.type === "ticker") && msg.symbol) {
-          const internalSym = this.deltaToInternal.get(msg.symbol);
-          if (!internalSym) {
-            logger.debug({ provider: this.name, symbol: msg.symbol }, "DeltaExchangeProvider: unmapped symbol — skip");
-            return;
-          }
+        // ── New public `ticker` channel: ~5s metadata/live-price snapshot ───
+        if (msg.type === "ticker") {
+          const ticker = msg as unknown as DeltaTickerMsg;
+          const deltaSym = ticker.sy?.toUpperCase();
+          const row = ticker.d?.find(x => x.s?.toUpperCase() === deltaSym) ?? ticker.d?.[0];
+          const rowSym = row?.s?.toUpperCase() ?? deltaSym;
+          if (!rowSym) return;
 
-          // Prefer the last traded close for the live-price fallback. Mark price
-          // is a valuation price and must never be treated as an OHLC sample.
+          const internalSym = this.deltaToInternal.get(rowSym);
+          if (!internalSym) return;
+
+          const ohlc = row?.ohlc ?? [];
           const price =
-            parsePrice(msg.close)      ||
-            parsePrice(msg.spot_price) ||
-            parsePrice(msg.mark_price) ||
-            parsePrice(msg.best_bid);
+            parsePrice(ohlc[3]) ||
+            parsePrice(row?.m) ||
+            parsePrice(ticker.sp);
+          if (isNaN(price)) return;
 
-          if (isNaN(price)) {
-            logger.warn({ provider: this.name, symbol: msg.symbol }, "DeltaExchangeProvider: no parseable price");
-            return;
-          }
+          const bid = parsePrice(row?.q?.[2]);
+          const ask = parsePrice(row?.q?.[0]);
+          const high = parsePrice(ohlc[1]);
+          const low = parsePrice(ohlc[2]);
+          const markPrice = parsePrice(row?.m);
+          const rawChange = typeof row?.m24hc === "string" ? parseFloat(row.m24hc) : row?.m24hc;
+          const changePct24h = typeof rawChange === "number" && Number.isFinite(rawChange)
+            ? rawChange
+            : undefined;
+          const rawTurnover = row?.to?.[1] ?? row?.to?.[0];
+          const volume = typeof rawTurnover === "string" ? parseFloat(rawTurnover) : (rawTurnover ?? 0);
+          const tsMs = normToMs(ticker.ts);
 
-          const rawVol = typeof msg.size === "number" ? msg.size
-            : typeof msg.size === "string" ? parseFloat(msg.size)
-            : parsePrice(msg.volume) || parsePrice(msg.turnover_usd) || 0;
-          const volume = isNaN(rawVol as number) ? 0 : rawVol as number;
-
-          const bid = parsePrice(msg.best_bid);
-          const ask = parsePrice(msg.best_ask);
-
-          const high         = parsePrice(msg.high);
-          const low          = parsePrice(msg.low);
-          const markPrice    = parsePrice(msg.mark_price);
-          const rawChangePct = typeof msg.mark_change_24h === "string"
-            ? parseFloat(msg.mark_change_24h)
-            : msg.mark_change_24h;
-          const changePct24h = typeof rawChangePct === "number" && !isNaN(rawChangePct) ? rawChangePct : undefined;
-
-          const tsMs = normToMs(msg.timestamp);
-
-          logger.info(
-            { provider: this.name, symbol: internalSym, price, deltaSym: msg.symbol },
-            "DeltaExchangeProvider: tick",
+          // Quote snapshots are intentionally NOT used by CandleAggregator.
+          this._emitTick(
+            internalSym,
+            rowSym,
+            price,
+            Number.isFinite(volume) ? volume : 0,
+            tsMs,
+            !isNaN(bid) ? bid : undefined,
+            !isNaN(ask) ? ask : undefined,
+            {
+              high: !isNaN(high) ? high : undefined,
+              low: !isNaN(low) ? low : undefined,
+              markPrice: !isNaN(markPrice) ? markPrice : undefined,
+              changePct24h,
+            },
+            "quote",
           );
-          this._emitTick(internalSym, msg.symbol, price, volume, tsMs, bid, ask, {
-            high:  !isNaN(high) ? high : undefined,
-            low:   !isNaN(low) ? low : undefined,
-            markPrice: !isNaN(markPrice) ? markPrice : undefined,
-            changePct24h,
-          }, "quote");
         }
       } catch (err) {
-        logger.warn({ err, provider: this.name, raw: str.slice(0, 200) }, "DeltaExchangeProvider: parse error");
+        logger.warn(
+          { err, provider: this.name, raw: str.slice(0, 300) },
+          "DeltaExchangeProvider: message parse error",
+        );
       }
     });
 
-    this.ws.on("error", (err) => {
+    this.ws.on("error", (err: Error) => {
       logger.warn({ provider: this.name, err: err.message }, "DeltaExchangeProvider: WS error");
       this.onError(err);
     });
 
     this.ws.on("close", (code, reason) => {
-      logger.info({ provider: this.name, code, reason: reason.toString() }, "DeltaExchangeProvider: WS closed");
+      logger.info(
+        { provider: this.name, code, reason: reason.toString() },
+        "DeltaExchangeProvider: public WS closed",
+      );
       this.clearPing();
       this.onDisconnected(code);
     });
   }
 
   override subscribe(symbol: string): boolean {
-    if (!this.internalToDelta.has(symbol) && /^[A-Z0-9]+USDT?$/.test(symbol)) {
-      this.internalToDelta.set(symbol, symbol);
-      this.deltaToInternal.set(symbol, symbol);
-      logger.info({ provider: this.name, symbol }, "DeltaExchangeProvider: dynamically registered new symbol");
+    const s = symbol.toUpperCase();
+    if (!this.internalToDelta.has(s) && /^[A-Z0-9]+(?:USD|USDT)$/.test(s)) {
+      // Keep explicit app symbols usable even before the product catalog loads.
+      // Delta India market symbols are normally USD-quoted.
+      const deltaSym = s.endsWith("USDT") ? s.slice(0, -1) : s;
+      this.internalToDelta.set(s, deltaSym);
+      this.deltaToInternal.set(deltaSym, s);
+      logger.info({ provider: this.name, symbol: s, deltaSym }, "DeltaExchangeProvider: dynamically registered symbol");
     }
-    return super.subscribe(symbol);
+    return super.subscribe(s);
   }
 
   subscribeSymbol(symbol: string): void {
-    const deltaSym = this.internalToDelta.get(symbol);
+    const deltaSym = this.internalToDelta.get(symbol.toUpperCase());
     if (!deltaSym) {
-      logger.warn({ provider: this.name, symbol }, "DeltaExchangeProvider: subscribeSymbol — no delta mapping");
+      logger.warn({ provider: this.name, symbol }, "DeltaExchangeProvider: subscribeSymbol — no mapping");
       return;
     }
     if (this.ws?.readyState === WebSocket.OPEN && !this.subscribedDelta.has(deltaSym)) {
@@ -265,18 +303,19 @@ export class DeltaExchangeProvider extends BaseProvider {
   }
 
   unsubscribeSymbol(symbol: string): void {
-    const deltaSym = this.internalToDelta.get(symbol);
+    const deltaSym = this.internalToDelta.get(symbol.toUpperCase());
     if (!deltaSym) return;
     this.subscribedDelta.delete(deltaSym);
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({
         type: "unsubscribe",
-        payload: { channels: [
-          { name: "all_trades", symbols: [deltaSym] },
-          { name: "v2/ticker", symbols: [deltaSym] },
-        ]},
+        payload: {
+          channels: [
+            { name: "trades", symbols: [deltaSym] },
+            { name: "ticker", symbols: [deltaSym] },
+          ],
+        },
       }));
-      logger.info({ provider: this.name, deltaSym }, "DeltaExchangeProvider: unsubscribed");
     }
   }
 
@@ -301,19 +340,19 @@ export class DeltaExchangeProvider extends BaseProvider {
     tickType: "trade" | "quote" = "trade",
   ): void {
     const tick: ProviderTick = {
-      symbol:          internalSym,
-      providerSymbol:  deltaSym,
-      provider:        this.name,
+      symbol: internalSym,
+      providerSymbol: deltaSym,
+      provider: this.name,
       price,
       volume,
-      timestamp:       tsMs,
-      receivedAt:      Date.now(),
-      ...(bid && !isNaN(bid) ? { bid } : {}),
-      ...(ask && !isNaN(ask) ? { ask } : {}),
-      ...(extra?.high !== undefined && !isNaN(extra.high) ? { high: extra.high } : {}),
-      ...(extra?.low !== undefined && !isNaN(extra.low) ? { low: extra.low } : {}),
-      ...(extra?.markPrice !== undefined && !isNaN(extra.markPrice) ? { markPrice: extra.markPrice } : {}),
-      ...(extra?.changePct24h !== undefined && !isNaN(extra.changePct24h) ? { changePct24h: extra.changePct24h } : {}),
+      timestamp: tsMs,
+      receivedAt: Date.now(),
+      ...(bid !== undefined && Number.isFinite(bid) ? { bid } : {}),
+      ...(ask !== undefined && Number.isFinite(ask) ? { ask } : {}),
+      ...(extra?.high !== undefined && Number.isFinite(extra.high) ? { high: extra.high } : {}),
+      ...(extra?.low !== undefined && Number.isFinite(extra.low) ? { low: extra.low } : {}),
+      ...(extra?.markPrice !== undefined && Number.isFinite(extra.markPrice) ? { markPrice: extra.markPrice } : {}),
+      ...(extra?.changePct24h !== undefined && Number.isFinite(extra.changePct24h) ? { changePct24h: extra.changePct24h } : {}),
       tickType,
     };
     this.onTick(tick);
@@ -322,17 +361,27 @@ export class DeltaExchangeProvider extends BaseProvider {
   private _sendSubscribe(deltaSym: string): void {
     if (this.subscribedDelta.has(deltaSym)) return;
     this.subscribedDelta.add(deltaSym);
+
     this.ws!.send(JSON.stringify({
       type: "subscribe",
-      payload: { channels: [
-        { name: "all_trades", symbols: [deltaSym] },
-        { name: "v2/ticker", symbols: [deltaSym] },
-      ]},
+      payload: {
+        channels: [
+          { name: "trades", symbols: [deltaSym] },
+          { name: "ticker", symbols: [deltaSym] },
+        ],
+      },
     }));
-    logger.info({ provider: this.name, deltaSym }, "DeltaExchangeProvider: subscribe sent (all_trades + v2/ticker)");
+
+    logger.info(
+      { provider: this.name, deltaSym, channels: ["trades", "ticker"] },
+      "DeltaExchangeProvider: public market-data subscription sent",
+    );
   }
 
   private clearPing(): void {
-    if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
   }
 }
