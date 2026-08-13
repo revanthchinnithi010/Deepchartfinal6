@@ -78,7 +78,7 @@ const newScale = `        // Do not restore a persisted manual vertical range fr
 
 if (text.includes(oldScale)) {
   text = text.replace(oldScale, newScale);
-} else if (!text.includes("Never restore a persisted vertical price range")) {
+} else if (!text.includes("Do not restore a persisted manual vertical range")) {
   throw new Error("Saved vertical-range block not found");
 }
 
