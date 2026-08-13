@@ -2,6 +2,7 @@ import { EventEmitter } from "events";
 import { MarketFeedManager, type UnifiedTick } from "./MarketFeedManager.js";
 import type { ProviderStats } from "./providers/BaseProvider.js";
 import { logger } from "../lib/logger.js";
+import { marketSubscriptionBus } from "./marketSubscriptionBus.js";
 
 export type { UnifiedTick as LatestTick };
 
@@ -11,6 +12,9 @@ export class MarketDataService extends EventEmitter {
   constructor() {
     super();
     this.feedManager = new MarketFeedManager();
+    marketSubscriptionBus.on("subscribe", (symbol: string) => {
+      this.subscribe(symbol);
+    });
   }
 
   async start(defaultSymbols: string[] = []): Promise<void> {
@@ -48,7 +52,6 @@ export class MarketDataService extends EventEmitter {
   enableDelta(symbols: string[]): void                   { this.feedManager.enableDelta(symbols); }
   disableDelta(): void                                   { this.feedManager.disableDelta(); }
 
-  /** Forward a tick from an external engine (cTrader) into this service's event stream. */
   injectExternalTick(tick: UnifiedTick): void            { this.feedManager.injectExternalTick(tick); }
 
   getSymbolService()                                     { return this.feedManager.symbolService; }
