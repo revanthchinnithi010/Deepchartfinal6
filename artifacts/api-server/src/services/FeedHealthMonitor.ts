@@ -31,6 +31,7 @@ export interface FeedHealth {
 export class FeedHealthMonitor {
   private lastTickAt: Map<string, number> = new Map();
   private lastPrice: Map<string, number> = new Map();
+  private lastProvider: Map<string, string> = new Map();
   private feedConnectedAt: number | null = null;
   private broadcastTimer: ReturnType<typeof setInterval> | null = null;
   private staleAlertSent: Set<string> = new Set();
@@ -42,9 +43,10 @@ export class FeedHealthMonitor {
   ) {}
 
   start(): void {
-    this.marketData.on("tick", (tick: { symbol: string; price: number; receivedAt: number }) => {
+    this.marketData.on("tick", (tick: { symbol: string; price: number; receivedAt: number; provider?: string }) => {
       this.lastTickAt.set(tick.symbol, tick.receivedAt);
       this.lastPrice.set(tick.symbol, tick.price);
+      if (tick.provider) this.lastProvider.set(tick.symbol, tick.provider);
     });
 
     this.marketData.on("feed_status", (status: { status: string }) => {
@@ -75,22 +77,24 @@ export class FeedHealthMonitor {
 
     const inGracePeriod =
       this.feedConnectedAt !== null && now - this.feedConnectedAt < STARTUP_GRACE_MS;
-    void inGracePeriod;
 
     for (const sym of subscriptions) {
       const lastAt = this.lastTickAt.get(sym) ?? null;
       const price = this.lastPrice.get(sym) ?? null;
       const neverReceived = lastAt === null;
-      const provider = this.marketData.getProviderForSymbol(sym) ?? "unknown";
+      // Prefer the provider attached to the actual last tick. This is critical
+      // for cTrader symbols because cTrader ticks enter through the external
+      // tick bridge and are not represented by a MarketFeedManager provider.
+      const provider = this.lastProvider.get(sym)
+        ?? this.marketData.getProviderForSymbol(sym)
+        ?? "unknown";
 
-      // A cTrader spot subscription is not a continuous heartbeat. cTrader's
-      // first spot event contains the latest quote and, when the market is
-      // closed, the API may send only that single event. Therefore a missing
-      // cTrader tick must NOT be treated as a broken feed or used to trigger a
-      // Telegram stale-feed alert. Connection health is handled by the
-      // dedicated cTrader engine status stream instead.
-      const isCtrader = provider.toLowerCase() === "ctrader";
-      const isStale = !isCtrader && !neverReceived && (now - lastAt!) > STALE_THRESHOLD_MS;
+      const isDelta = provider.toLowerCase() === "delta";
+      // Stale-tick detection is valid only for providers that guarantee a
+      // continuous trade/ticker heartbeat. cTrader spot does not: a quiet
+      // market/session can legitimately have no SPOT_EVENT for >60 seconds.
+      // Therefore unknown/cTrader/other providers are never marked stale here.
+      const isStale = isDelta && !inGracePeriod && !neverReceived && (now - lastAt!) > STALE_THRESHOLD_MS;
       const staleSinceMs = isStale ? now - lastAt! : null;
 
       symbolHealth[sym] = {
@@ -120,12 +124,12 @@ export class FeedHealthMonitor {
 
   private checkStaleAlerts(health: FeedHealth): void {
     for (const [sym, sh] of Object.entries(health.symbols)) {
-      // Never send symbol-level stale Telegram alerts for cTrader. A cTrader
-      // spot stream can legitimately have no new tick for a period, including
-      // when a market/session is closed. The dedicated cTrader connection
-      // status is the correct signal for an actual feed outage.
-      const isCtrader = sh.provider.toLowerCase() === "ctrader";
-      if (isCtrader) {
+      // Telegram stale-feed alerts are deliberately limited to Delta. cTrader
+      // connection health is reported by its dedicated engine status stream;
+      // treating missing cTrader ticks as a stale-feed outage creates false
+      // alerts and does not mean the backend stopped receiving data.
+      const isDelta = sh.provider.toLowerCase() === "delta";
+      if (!isDelta) {
         this.staleAlertSent.delete(sym);
         continue;
       }
