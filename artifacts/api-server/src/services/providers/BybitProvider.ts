@@ -7,17 +7,12 @@ const PING_INTERVAL_MS = 20_000;
 const INTERNAL_SYMBOL = "FARTCOINUSD";
 const BYBIT_SYMBOL = "FARTCOINUSDT";
 
-interface BybitTrade {
-  T?: number;
-  p?: string;
-  v?: string;
-  S?: string;
-  s?: string;
-}
-
+interface BybitTrade { T?: number; p?: string; v?: string; S?: string; s?: string; }
 interface BybitMessage {
   topic?: string;
   type?: string;
+  op?: string;
+  ret_msg?: string;
   ts?: number;
   data?: BybitTrade[];
 }
@@ -33,7 +28,7 @@ export class BybitProvider extends BaseProvider {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
 
   connect(): void {
-    if (this.destroyed) return;
+    if (this.destroyed || this.ws?.readyState === WebSocket.OPEN) return;
     this.clearReconnectTimer();
     this.clearPing();
     logger.info({ provider: this.name, url: BYBIT_PUBLIC_WS }, "BybitProvider: connecting");
@@ -43,9 +38,7 @@ export class BybitProvider extends BaseProvider {
       this.onConnected();
       this._sendSubscribe();
       this.pingTimer = setInterval(() => {
-        if (this.ws?.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ op: "ping" }));
-        }
+        if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ op: "ping" }));
       }, PING_INTERVAL_MS);
       logger.info({ provider: this.name, symbol: BYBIT_SYMBOL }, "BybitProvider: public trade stream subscribed");
     });
@@ -53,7 +46,11 @@ export class BybitProvider extends BaseProvider {
     this.ws.on("message", raw => {
       try {
         const msg = JSON.parse(raw.toString()) as BybitMessage;
-        if (msg.type === "COMMAND_RESP" || msg.op === "pong" || msg.ret_msg === undefined && msg.op === "pong") return;
+        if (msg.type === "COMMAND_RESP" || msg.op === "pong") return;
+        if (msg.op === "subscribe") {
+          if (msg.ret_msg) logger.warn({ provider: this.name, ret_msg: msg.ret_msg }, "BybitProvider: subscription rejected");
+          return;
+        }
         if (!msg.topic?.startsWith("publicTrade.")) return;
         const trades = Array.isArray(msg.data) ? msg.data : [];
         for (const trade of trades) {
@@ -92,9 +89,7 @@ export class BybitProvider extends BaseProvider {
     if (symbol.toUpperCase() === INTERNAL_SYMBOL && this.ws?.readyState === WebSocket.OPEN) this._sendSubscribe();
   }
 
-  unsubscribeSymbol(_symbol: string): void {
-    // This diagnostic provider is intentionally scoped to FARTCOINUSD.
-  }
+  unsubscribeSymbol(_symbol: string): void {}
 
   destroy(): void {
     this.destroyed = true;
@@ -105,16 +100,10 @@ export class BybitProvider extends BaseProvider {
   }
 
   private _sendSubscribe(): void {
-    this.ws?.send(JSON.stringify({
-      op: "subscribe",
-      args: [`publicTrade.${BYBIT_SYMBOL}`],
-    }));
+    this.ws?.send(JSON.stringify({ op: "subscribe", args: [`publicTrade.${BYBIT_SYMBOL}`] }));
   }
 
   private clearPing(): void {
-    if (this.pingTimer) {
-      clearInterval(this.pingTimer);
-      this.pingTimer = null;
-    }
+    if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
   }
 }
