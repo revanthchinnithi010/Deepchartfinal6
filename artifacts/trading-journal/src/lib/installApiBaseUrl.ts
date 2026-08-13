@@ -42,7 +42,7 @@ function withAuthHeader(input: RequestInfo | URL, init: RequestInit | undefined)
   return { ...init, headers };
 }
 
-function installWebSocketAuth(): void {
+function installWebSocketAuth(base: string): void {
   if (websocketPatched || typeof window === "undefined" || typeof window.WebSocket === "undefined") return;
   websocketPatched = true;
 
@@ -53,16 +53,27 @@ function installWebSocketAuth(): void {
       let nextUrl = url;
       const token = getStoredAuthToken();
 
-      if (token) {
-        try {
-          const parsed = new URL(String(url), window.location.href);
-          if (parsed.pathname === "/api/ws" || parsed.pathname === "/ws") {
-            parsed.searchParams.set("token", token);
-            nextUrl = parsed.toString();
+      try {
+        const parsed = new URL(String(url), window.location.href);
+        const isApiSocket = parsed.pathname === "/api/ws" || parsed.pathname === "/ws";
+
+        if (isApiSocket) {
+          // IMPORTANT: WebSockets must be routed to the Railway backend too.
+          // A relative `/api/ws` URL otherwise resolves against the frontend
+          // origin, causing the live feed to connect to the wrong service.
+          const backend = new URL(base);
+          backend.protocol = backend.protocol === "https:" ? "wss:" : "ws:";
+          backend.pathname = parsed.pathname;
+          backend.search = parsed.search;
+
+          if (token) {
+            backend.searchParams.set("token", token);
           }
-        } catch {
-          // Fall back to the original URL; the normal reconnect flow handles it.
+
+          nextUrl = backend.toString();
         }
+      } catch {
+        // Fall back to the original URL; the normal reconnect flow handles it.
       }
 
       super(nextUrl, protocols);
@@ -113,5 +124,5 @@ export function installApiBaseUrl(): void {
     return realFetch(new Request(absolute, input), mergedInit);
   };
 
-  installWebSocketAuth();
+  installWebSocketAuth(resolvedBase);
 }
