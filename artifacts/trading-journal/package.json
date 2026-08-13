@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "predev": "bash ../../scripts/ensure-install.sh",
-    "prebuild": "node ../../scripts/fix-chart-candle-root.mjs",
     "dev": "pnpm exec vite --config vite.config.ts --host 0.0.0.0",
     "build": "node -e \"const fs=require('fs');const p='src/components/charts/CustomChart.tsx';let s=fs.readFileSync(p,'utf8');s=s.replace(/MIN_FUTURE_BARS\\s*=\\s*50/,'MIN_FUTURE_BARS = 8');fs.writeFileSync(p,s);\" && pnpm exec vite build --config vite.config.ts && node ./scripts/mirror-dist-public.mjs",
     "serve": "pnpm exec vite preview --config vite.config.ts --host 0.0.0.0",
@@ -59,6 +58,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.511.0",
     "next-themes": "^0.4.4",
+    "@workspace/api-client-react": "workspace:*",
     "react": "^19.0.0",
     "react-day-picker": "^9.7.0",
     "react-dom": "^19.0.0",
