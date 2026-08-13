@@ -10,9 +10,9 @@ import { logger } from "../../lib/logger.js";
  *   - all_trades  → fires on EVERY executed trade (sub-second during active markets)
  *   - v2/ticker   → full ticker snapshot every ~5s (volume, spread, mark price, bid/ask)
  *
- * `all_trades` is the primary real-time tick source — it gives MT5/TradingView-level
- * update frequency when the market is active. `v2/ticker` is the reliable baseline
- * that ensures prices update even in thin markets or when `all_trades` is sparse.
+ * `all_trades` is the primary real-time tick source for OHLC candles.
+ * `v2/ticker` is a quote/mark snapshot used as a live-price fallback only;
+ * it is deliberately excluded from OHLC candle formation.
  *
  * Timestamp normalization:
  *   Delta India sends microsecond timestamps (1.78e15 for 2026).
@@ -155,10 +155,7 @@ export class DeltaExchangeProvider extends BaseProvider {
           return;
         }
 
-        // ── all_trades: fires on EVERY executed trade — primary tick source ────
-        // This is the MT5/TradingView-equivalent real-time feed.
-        // Sends one message per trade execution, giving sub-second updates when
-        // the market is active. Falls back to v2/ticker in thin markets.
+        // ── all_trades: fires on EVERY executed trade — primary candle source ──
         if (msg.type === "all_trades" && msg.symbol) {
           const internalSym = this.deltaToInternal.get(msg.symbol);
           if (!internalSym) return;
@@ -176,14 +173,11 @@ export class DeltaExchangeProvider extends BaseProvider {
             { provider: this.name, symbol: internalSym, price, deltaSym: msg.symbol },
             "DeltaExchangeProvider: all_trades tick",
           );
-          this._emitTick(internalSym, msg.symbol, price, volume, tsMs);
+          this._emitTick(internalSym, msg.symbol, price, volume, tsMs, undefined, undefined, undefined, "trade");
           return;
         }
 
-        // ── v2/ticker: full snapshot every ~5s — reliable baseline ─────────────
-        // Continues to provide price updates even when all_trades is sparse
-        // (thin markets, low volatility, off-hours trading).
-        // Also the primary source for bid/ask/spread data.
+        // ── v2/ticker: quote snapshot every ~5s — live price fallback only ─────
         if ((msg.type === "v2/ticker" || msg.type === "ticker") && msg.symbol) {
           const internalSym = this.deltaToInternal.get(msg.symbol);
           if (!internalSym) {
@@ -191,10 +185,12 @@ export class DeltaExchangeProvider extends BaseProvider {
             return;
           }
 
+          // Prefer the last traded close for the live-price fallback. Mark price
+          // is a valuation price and must never be treated as an OHLC sample.
           const price =
-            parsePrice(msg.mark_price) ||
             parsePrice(msg.close)      ||
             parsePrice(msg.spot_price) ||
+            parsePrice(msg.mark_price) ||
             parsePrice(msg.best_bid);
 
           if (isNaN(price)) {
@@ -207,11 +203,9 @@ export class DeltaExchangeProvider extends BaseProvider {
             : parsePrice(msg.volume) || parsePrice(msg.turnover_usd) || 0;
           const volume = isNaN(rawVol as number) ? 0 : rawVol as number;
 
-          // Extract bid/ask from ticker snapshot
           const bid = parsePrice(msg.best_bid);
           const ask = parsePrice(msg.best_ask);
 
-          // 24h stats — high/low/mark price/mark change, when present on the snapshot
           const high         = parsePrice(msg.high);
           const low          = parsePrice(msg.low);
           const markPrice    = parsePrice(msg.mark_price);
@@ -231,7 +225,7 @@ export class DeltaExchangeProvider extends BaseProvider {
             low:   !isNaN(low) ? low : undefined,
             markPrice: !isNaN(markPrice) ? markPrice : undefined,
             changePct24h,
-          });
+          }, "quote");
         }
       } catch (err) {
         logger.warn({ err, provider: this.name, raw: str.slice(0, 200) }, "DeltaExchangeProvider: parse error");
@@ -250,11 +244,6 @@ export class DeltaExchangeProvider extends BaseProvider {
     });
   }
 
-  /**
-   * Override BaseProvider.subscribe() so we can dynamically register symbols
-   * that arrive after the bootstrap (or before it completes).
-   * For Delta India: internalSymbol === deltaSymbol (both "xyzUSD").
-   */
   override subscribe(symbol: string): boolean {
     if (!this.internalToDelta.has(symbol) && /^[A-Z0-9]+USDT?$/.test(symbol)) {
       this.internalToDelta.set(symbol, symbol);
@@ -281,10 +270,10 @@ export class DeltaExchangeProvider extends BaseProvider {
     this.subscribedDelta.delete(deltaSym);
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({
-        type:    "unsubscribe",
+        type: "unsubscribe",
         payload: { channels: [
           { name: "all_trades", symbols: [deltaSym] },
-          { name: "v2/ticker",  symbols: [deltaSym] },
+          { name: "v2/ticker", symbols: [deltaSym] },
         ]},
       }));
       logger.info({ provider: this.name, deltaSym }, "DeltaExchangeProvider: unsubscribed");
@@ -309,6 +298,7 @@ export class DeltaExchangeProvider extends BaseProvider {
     bid?: number,
     ask?: number,
     extra?: { high?: number; low?: number; markPrice?: number; changePct24h?: number },
+    tickType: "trade" | "quote" = "trade",
   ): void {
     const tick: ProviderTick = {
       symbol:          internalSym,
@@ -316,7 +306,7 @@ export class DeltaExchangeProvider extends BaseProvider {
       provider:        this.name,
       price,
       volume,
-      timestamp:       tsMs,   // milliseconds — CandleAggregator expects ms
+      timestamp:       tsMs,
       receivedAt:      Date.now(),
       ...(bid && !isNaN(bid) ? { bid } : {}),
       ...(ask && !isNaN(ask) ? { ask } : {}),
@@ -324,6 +314,7 @@ export class DeltaExchangeProvider extends BaseProvider {
       ...(extra?.low !== undefined && !isNaN(extra.low) ? { low: extra.low } : {}),
       ...(extra?.markPrice !== undefined && !isNaN(extra.markPrice) ? { markPrice: extra.markPrice } : {}),
       ...(extra?.changePct24h !== undefined && !isNaN(extra.changePct24h) ? { changePct24h: extra.changePct24h } : {}),
+      tickType,
     };
     this.onTick(tick);
   }
@@ -331,14 +322,11 @@ export class DeltaExchangeProvider extends BaseProvider {
   private _sendSubscribe(deltaSym: string): void {
     if (this.subscribedDelta.has(deltaSym)) return;
     this.subscribedDelta.add(deltaSym);
-    // Subscribe to both channels in one payload:
-    //   all_trades → per-trade ticks (sub-second during active markets)
-    //   v2/ticker  → reliable 5-second snapshot as baseline fallback + bid/ask
     this.ws!.send(JSON.stringify({
-      type:    "subscribe",
+      type: "subscribe",
       payload: { channels: [
         { name: "all_trades", symbols: [deltaSym] },
-        { name: "v2/ticker",  symbols: [deltaSym] },
+        { name: "v2/ticker", symbols: [deltaSym] },
       ]},
     }));
     logger.info({ provider: this.name, deltaSym }, "DeltaExchangeProvider: subscribe sent (all_trades + v2/ticker)");

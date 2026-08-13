@@ -41,8 +41,11 @@ const newFresh = `      // Compare the complete OHLCV dataset, not only the last
         applyBarArray(bars, sym, iv);
       }`;
 
-if (!text.includes(oldFresh)) throw new Error("Fresh OHLC comparison block not found");
-text = text.replace(oldFresh, newFresh);
+if (text.includes(oldFresh)) {
+  text = text.replace(oldFresh, newFresh);
+} else if (!text.includes("Compare the complete OHLCV dataset")) {
+  throw new Error("Fresh OHLC comparison block not found");
+}
 
 const oldScale = `        if (typeof saved.priceMin === "number" && typeof saved.priceMax === "number") {
           activatePanRange({ lo: saved.priceMin, hi: saved.priceMax });
@@ -73,8 +76,70 @@ const newScale = `        // Do not restore a persisted manual vertical range fr
           }
         } catch { }`;
 
-if (!text.includes(oldScale)) throw new Error("Saved vertical-range block not found");
-text = text.replace(oldScale, newScale);
+if (text.includes(oldScale)) {
+  text = text.replace(oldScale, newScale);
+} else if (!text.includes("Never restore a persisted vertical price range")) {
+  throw new Error("Saved vertical-range block not found");
+}
+
+const oldSpacing = `        minBarSpacing:   4,`;
+const newSpacing = `        // Keep mobile 1m candle bodies readable even after a wide viewport
+        // restore. This is a lower bound; users can still zoom in/out.
+        minBarSpacing:   6,`;
+if (text.includes(oldSpacing)) {
+  text = text.replace(oldSpacing, newSpacing);
+} else if (!text.includes("minBarSpacing:   6,")) {
+  throw new Error("Chart minBarSpacing target not found");
+}
+
+// Delta v2/ticker snapshots are quote/mark data. They keep the live price box
+// responsive but must not be fed into the OHLC trade aggregator.
+const oldTick = `        const t = msg as unknown as { symbol?: string; price?: number; volume?: number; timestamp?: number };
+        if (!t.symbol || t.symbol !== symRef.current || typeof t.price !== "number") return;`;
+const newTick = `        const t = msg as unknown as {
+          symbol?: string;
+          price?: number;
+          volume?: number;
+          timestamp?: number;
+          tickType?: "trade" | "quote";
+        };
+        if (!t.symbol || t.symbol !== symRef.current || typeof t.price !== "number") return;`;
+if (text.includes(oldTick)) {
+  text = text.replace(oldTick, newTick);
+} else if (!text.includes('tickType?: "trade" | "quote"')) {
+  throw new Error("Chart tick payload target not found");
+}
+
+const oldIngest = `        const result = agg.ingest(price, volume, tsSec);
+        if (!result) return; // identical consecutive price — skip`;
+const newIngest = `        // Delta quote snapshots update live price only; executed trades are
+        // the sole Delta input allowed to form chart OHLC candles.
+        if (t.tickType === "quote") {
+          tickDataRef.current.price = price;
+          lastTickTimeRef.current = Date.now();
+          if (!statePendingRef.current) {
+            statePendingRef.current = true;
+            requestAnimationFrame(() => {
+              statePendingRef.current = false;
+              if (!mountedRef.current) return;
+              const d = tickDataRef.current;
+              if (d.price !== null && d.price !== livePxRef.current) {
+                livePxRef.current = d.price;
+                setLivePrice(d.price);
+                doUpdatePriceLine(d.price, symRef.current);
+              }
+            });
+          }
+          return;
+        }
+
+        const result = agg.ingest(price, volume, tsSec);
+        if (!result) return; // identical consecutive price — skip`;
+if (text.includes(oldIngest)) {
+  text = text.replace(oldIngest, newIngest);
+} else if (!text.includes('Delta quote snapshots update live price only')) {
+  throw new Error("Chart tick ingest target not found");
+}
 
 fs.writeFileSync(file, text);
-console.log("[chart-fix] Applied full-OHLC refresh + clean historical autoscale protection");
+console.log("[chart-fix] Applied full-OHLC refresh + clean autoscale + trade-only Delta candle input");

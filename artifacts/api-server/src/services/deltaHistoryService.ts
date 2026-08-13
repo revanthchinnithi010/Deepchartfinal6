@@ -138,14 +138,23 @@ export async function fetchDeltaCandles(
     }
 
     const bars: OHLCBar[] = body.result
-      .map((c): OHLCBar => ({
-        time:   Math.floor(toNum(c.time)),
-        open:   toNum(c.open),
-        high:   toNum(c.high),
-        low:    toNum(c.low),
-        close:  toNum(c.close),
-        volume: toNum(c.volume),
-      }))
+      .map((c): OHLCBar => {
+        const open = toNum(c.open);
+        const close = toNum(c.close);
+        const rawHigh = toNum(c.high);
+        const rawLow = toNum(c.low);
+        // Enforce OHLC invariants before the chart ever sees the bar. This
+        // protects against malformed exchange payloads and guarantees that
+        // every candle contains its open/close inside the high/low range.
+        return {
+          time: Math.floor(toNum(c.time)),
+          open,
+          high: Math.max(rawHigh, open, close),
+          low: Math.min(rawLow, open, close),
+          close,
+          volume: Math.max(0, toNum(c.volume)),
+        };
+      })
       .filter(b =>
         b.time  > 0 &&
         b.open  > 0 &&

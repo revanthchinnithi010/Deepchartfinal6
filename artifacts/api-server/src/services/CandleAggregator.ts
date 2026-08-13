@@ -16,10 +16,6 @@ export type CandleInterval = "1" | "3" | "5" | "15" | "30" | "60" | "240" | "D" 
 const SUPPORTED_INTERVALS: CandleInterval[] = ["1", "3", "5", "15", "30", "60", "240", "D", "W"];
 const MAX_BARS = 500;
 
-// cTrader historical trendbars are the authoritative source for chart history.
-// The local tick aggregator is only needed for the currently forming candle.
-// Returning all locally completed candles here would cause candles.ts to merge
-// them over the exact cTrader OHLC history and distort historical formation.
 const CTRADER_SYMBOLS = new Set([
   "NAS100", "US30", "US500", "SPX500", "GER40", "DE40", "UK100", "JP225",
   "XAUUSD", "XAGUSD", "USOIL", "UKOIL", "NATGAS",
@@ -63,10 +59,13 @@ export class CandleAggregator extends EventEmitter {
   }
 
   ingestTick(tick: UnifiedTick): void {
+    // Delta v2/ticker is a quote/mark snapshot, not an executed trade.
+    // It may arrive every few seconds and must never become an OHLC sample.
+    if (tick.provider === "delta" && tick.tickType === "quote") return;
+
     const { symbol, price, timestamp } = tick;
     const tsMs = timestamp ?? Date.now();
 
-    // Guard: reject clearly invalid prices
     if (!Number.isFinite(price) || price <= 0) return;
 
     for (const interval of SUPPORTED_INTERVALS) {
@@ -74,24 +73,17 @@ export class CandleAggregator extends EventEmitter {
       const b        = this.getOrCreate(symbol, interval);
 
       if (!b.current) {
-        // First tick ever for this symbol+interval
         b.current = { time: barStart, open: price, high: price, low: price, close: price, volume: 1 };
-
       } else if (barStart < b.current.time) {
-        // Out-of-order tick: never corrupt the active candle.
         logger.debug({ symbol, interval, tickBarStart: barStart, currentBarStart: b.current.time },
           "CandleAggregator: out-of-order tick discarded");
         continue;
-
       } else if (b.current.time !== barStart) {
-        // New candle boundary
         const closed = { ...b.current };
         b.completed.push(closed);
         if (b.completed.length > MAX_BARS) b.completed.shift();
         b.current = { time: barStart, open: price, high: price, low: price, close: price, volume: 1 };
-
       } else {
-        // Update existing candle in-place
         if (price > b.current.high) b.current.high = price;
         if (price < b.current.low)  b.current.low  = price;
         b.current.close   = price;
@@ -102,12 +94,6 @@ export class CandleAggregator extends EventEmitter {
     }
   }
 
-  /**
-   * Replace/synchronize a candle with an authoritative cTrader OHLC bar.
-   * cTrader trendbars are the broker's canonical 1m OHLC and are therefore
-   * used to correct the locally tick-aggregated candle. Subsequent ticks can
-   * continue updating the same active candle normally.
-   */
   applyAuthoritativeBar(symbol: string, interval: CandleInterval, bar: OHLCBar): void {
     if (!Number.isFinite(bar.time) || bar.time <= 0) return;
     if (!Number.isFinite(bar.open) || !Number.isFinite(bar.high) ||
@@ -124,8 +110,6 @@ export class CandleAggregator extends EventEmitter {
       volume: Math.max(0, Number.isFinite(bar.volume) ? bar.volume : 0),
     };
 
-    // If the broker has moved to a later bar, preserve the local previous bar
-    // only when it is not already represented by the authoritative data.
     if (b.current && normalized.time > b.current.time) {
       const previous = b.current;
       if (!b.completed.some(x => x.time === previous.time)) {
@@ -133,8 +117,6 @@ export class CandleAggregator extends EventEmitter {
       }
     }
 
-    // A trendbar returned by cTrader is the canonical OHLC for that bar. It can
-    // safely replace either the active bar or an existing completed copy.
     b.completed = b.completed.filter(x => x.time !== normalized.time);
     if (b.current?.time === normalized.time) {
       b.current = normalized;
@@ -154,9 +136,6 @@ export class CandleAggregator extends EventEmitter {
     const b = this.buckets.get(this.key(symbol, interval));
     if (!b) return [];
 
-    // cTrader chart history must remain broker-authoritative. Only expose the
-    // currently forming local candle to the API merge layer; all completed bars
-    // remain internal and must never overwrite cTrader trendbars.
     if (CTRADER_SYMBOLS.has(symbol.toUpperCase())) {
       return b.current ? [{ ...b.current }] : [];
     }

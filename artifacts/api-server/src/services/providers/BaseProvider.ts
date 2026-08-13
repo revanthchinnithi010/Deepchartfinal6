@@ -19,6 +19,8 @@ export interface ProviderTick {
   markPrice?:     number;
   /** 24h percentage change of mark price, as reported by Delta (mark_change_24h). */
   changePct24h?:  number;
+  /** Data source kind: trade ticks may build candles; quote snapshots only update live price. */
+  tickType?: "trade" | "quote";
 }
 
 export type ProviderStatus = "connected" | "reconnecting" | "disconnected" | "error";
