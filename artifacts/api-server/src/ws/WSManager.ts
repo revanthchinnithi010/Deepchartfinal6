@@ -36,10 +36,6 @@ export class WSManager {
   /** Pre-serialized cache: key → JSON string, invalidated on each new candle event */
   private candlePayloadCache: Map<string, string> = new Map();
 
-  /** Tracks outstanding server-initiated pings: client -> timestamp sent */
-  private pendingPongs: Map<WebSocket, number> = new Map();
-  private readonly PONG_TIMEOUT_MS = 10_000;
-
   constructor() {
     this.wss = new WebSocketServer({ noServer: true });
     this.setupServer();
@@ -184,7 +180,6 @@ export class WSManager {
       ws.on("close", () => {
         this.clients.delete(ws);
         this.clientState.delete(ws);
-        this.pendingPongs.delete(ws);
         logger.info({ total: this.clients.size }, "WSManager: client disconnected");
       });
 
@@ -192,34 +187,29 @@ export class WSManager {
         logger.error({ err }, "WSManager: client error");
         this.clients.delete(ws);
         this.clientState.delete(ws);
-        this.pendingPongs.delete(ws);
       });
 
+      // The browser's WebSocket implementation automatically answers protocol
+      // ping frames with pong frames. Do not use those protocol pongs as the
+      // application's connection watchdog: Railway/mobile proxies can delay or
+      // consume control frames even while normal WebSocket data is flowing.
+      // The frontend already has an application-level ping/pong watchdog.
       ws.on("pong", () => {
         logger.debug({ ip }, "WSManager: pong");
-        this.pendingPongs.delete(ws);
       });
     });
 
+    // Keep the TCP/WebSocket connection active with protocol-level pings, but
+    // NEVER terminate a client solely because a protocol pong was delayed.
+    // The previous pendingPongs timeout was causing healthy mobile clients to
+    // appear as "Feed Offline" after ~20–30 seconds on Railway/cellular networks.
     const pingInterval = setInterval(() => {
-      const now = Date.now();
       for (const client of this.clients) {
         if (client.readyState === WebSocket.OPEN) {
-          const sentAt = this.pendingPongs.get(client);
-          if (sentAt !== undefined && now - sentAt > this.PONG_TIMEOUT_MS) {
-            logger.warn("WSManager: pong timeout — terminating dead connection");
-            this.clients.delete(client);
-            this.clientState.delete(client);
-            this.pendingPongs.delete(client);
-            client.terminate();
-            continue;
-          }
-          this.pendingPongs.set(client, now);
-          client.ping();
+          try { client.ping(); } catch { /* close/error handler will clean it up */ }
         } else {
           this.clients.delete(client);
           this.clientState.delete(client);
-          this.pendingPongs.delete(client);
         }
       }
     }, 20_000);
