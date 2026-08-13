@@ -15,6 +15,7 @@ const INTERVAL_BY_DELTA_RESOLUTION = new Map(
 );
 
 interface DeltaTradeMsg { type: "trades"; p?: string | number; s?: string | number; sy?: string; t?: number; ts?: number; }
+interface DeltaL1Msg { type: "ob_l1"; bp?: string | number; ap?: string | number; sy?: string; ts?: number; lts?: number; }
 interface DeltaCandleMsg { type: string; sy?: string; symbol?: string; ts?: number; t?: number; o?: string | number; h?: string | number; l?: string | number; c?: string | number; v?: string | number; }
 
 function parsePrice(v: string | number | undefined | null): number {
@@ -105,6 +106,27 @@ export class DeltaExchangeProvider extends BaseProvider {
           return;
         }
 
+        // Delta's L1 public feed publishes best bid/ask about every 100ms
+        // (and at most every few seconds when unchanged). It is a reliable
+        // low-latency fallback for the chart when the trade stream is sparse.
+        // Quote ticks update the live UI/client OHLC aggregator but are ignored
+        // by the server CandleAggregator, so they cannot fabricate server OHLC.
+        if (msg.type === "ob_l1") {
+          const q = msg as unknown as DeltaL1Msg;
+          const deltaSym = q.sy?.toUpperCase();
+          if (!deltaSym) return;
+          const internal = this.deltaToInternal.get(deltaSym);
+          if (!internal) return;
+          const bid = parsePrice(q.bp);
+          const ask = parsePrice(q.ap);
+          const price = Number.isFinite(bid) && Number.isFinite(ask)
+            ? (bid + ask) / 2
+            : Number.isFinite(bid) ? bid : ask;
+          if (!Number.isFinite(price) || price <= 0) return;
+          this._emitTick(internal, deltaSym, price, 0, normToMs(q.ts ?? q.lts), "quote");
+          return;
+        }
+
         if (typeof msg.type === "string" && msg.type.startsWith("candlestick_")) {
           const candle = msg as unknown as DeltaCandleMsg;
           const deltaSym = (candle.sy ?? candle.symbol)?.toUpperCase();
@@ -157,6 +179,7 @@ export class DeltaExchangeProvider extends BaseProvider {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: "unsubscribe", payload: { channels: [
         { name: "trades", symbols: [deltaSym] },
+        { name: "ob_l1", symbols: [deltaSym] },
         ...Object.values(DELTA_RESOLUTION_BY_INTERVAL).map(resolution => ({ name: `candlestick_${resolution}`, symbols: [deltaSym] })),
       ] } }));
     }
@@ -173,6 +196,7 @@ export class DeltaExchangeProvider extends BaseProvider {
     this.subscribedDelta.add(deltaSym);
     const channels = [
       { name: "trades", symbols: [deltaSym] },
+      { name: "ob_l1", symbols: [deltaSym] },
       ...Object.values(DELTA_RESOLUTION_BY_INTERVAL).map(resolution => ({ name: `candlestick_${resolution}`, symbols: [deltaSym] })),
     ];
     this.ws!.send(JSON.stringify({ type: "subscribe", payload: { channels } }));
