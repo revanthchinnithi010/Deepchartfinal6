@@ -13,6 +13,7 @@ function getBarStartSec(timestampMs: number, interval: CandleInterval): number {
   if (interval === "W") { const d = new Date(timestampMs); const dow = d.getUTCDay(); const daysToMon = dow === 0 ? 6 : dow - 1; return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - daysToMon) / 1000; }
   const mins = parseInt(interval, 10); const intervalMs = mins * 60 * 1000; return Math.floor(timestampMs / intervalMs) * (mins * 60);
 }
+
 interface BucketState { completed: OHLCBar[]; current: OHLCBar | null; }
 
 export class CandleAggregator extends EventEmitter {
@@ -29,7 +30,11 @@ export class CandleAggregator extends EventEmitter {
       return;
     }
 
-    if (tick.provider === "delta" && tick.tickType === "quote") return;
+    // Quote snapshots are not trades. They must update the live-price UI but
+    // must never become OHLC samples; otherwise a 5-second ticker snapshot can
+    // create artificial flat candles and visible gaps in a 1m chart.
+    if (tick.tickType === "quote") return;
+
     const { symbol, price, timestamp } = tick;
     const tsMs = timestamp ?? Date.now();
     if (!Number.isFinite(price) || price <= 0) return;
@@ -59,7 +64,6 @@ export class CandleAggregator extends EventEmitter {
     if (![bar.open, bar.high, bar.low, bar.close].every(Number.isFinite) || bar.low <= 0 || bar.high < bar.low) return;
     const b = this.getOrCreate(symbol, interval);
     const normalized: OHLCBar = { time: Math.floor(bar.time), open: bar.open, high: Math.max(bar.high, bar.open, bar.close), low: Math.min(bar.low, bar.open, bar.close), close: bar.close, volume: Math.max(0, Number.isFinite(bar.volume) ? bar.volume : 0) };
-
     if (b.current && normalized.time > b.current.time) {
       const previous = b.current;
       if (!b.completed.some(x => x.time === previous.time)) b.completed.push({ ...previous });
