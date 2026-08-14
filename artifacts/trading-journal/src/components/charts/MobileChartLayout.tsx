@@ -203,7 +203,7 @@ if (typeof document !== "undefined") {
 }
 
 // ── Shared styles ──────────────────────────────────────────────────────────
-const SHEET_BG      = "rgba(10,12,16,0.98)";
+const SHEET_BG      = "#0F1618";
 const ACCENT        = "#60A5FA";
 const ACCENT_BG     = "rgba(96,165,250,0.10)";
 const ACCENT_BORDER = "rgba(96,165,250,0.28)";
@@ -1217,8 +1217,8 @@ const DrawingToolsSheet = memo(function DrawingToolsSheet({ onClose }: { onClose
             border:`1px solid ${activeTool === "cursor" ? ACCENT_BORDER : BTN_BORDER}`,
           }}
         >
-          <MousePointer style={{ width:16, height:16, color: activeTool === "cursor" ? ACCENT : TEXT_MED }} />
-          <span style={{ fontSize:12, fontWeight:600, color: activeTool === "cursor" ? ACCENT : TEXT_MED }}>Select</span>
+          <MousePointer style={{ width:16, height:16, color:"#fff" }} />
+          <span style={{ fontSize:12, fontWeight:600, color:"#fff" }}>Select</span>
         </button>
         <button
           onClick={() => selectTool("eraser")}
@@ -1228,20 +1228,20 @@ const DrawingToolsSheet = memo(function DrawingToolsSheet({ onClose }: { onClose
             border:`1px solid ${activeTool === "eraser" ? ACCENT_BORDER : BTN_BORDER}`,
           }}
         >
-          <Eraser style={{ width:16, height:16, color: activeTool === "eraser" ? ACCENT : TEXT_MED }} />
-          <span style={{ fontSize:12, fontWeight:600, color: activeTool === "eraser" ? ACCENT : TEXT_MED }}>Eraser</span>
+          <Eraser style={{ width:16, height:16, color:"#fff" }} />
+          <span style={{ fontSize:12, fontWeight:600, color:"#fff" }}>Eraser</span>
         </button>
         <button onClick={undo} disabled={!canUndo} style={{
           width:40, height:40, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", cursor: canUndo ? "pointer" : "default",
           background: BTN_BG, border:`1px solid ${BTN_BORDER}`, opacity: canUndo ? 1 : 0.35,
         }}>
-          <Undo2 style={{ width:16, height:16, color: TEXT_MED }} />
+          <Undo2 style={{ width:16, height:16, color:"#fff" }} />
         </button>
         <button onClick={redo} disabled={!canRedo} style={{
           width:40, height:40, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", cursor: canRedo ? "pointer" : "default",
           background: BTN_BG, border:`1px solid ${BTN_BORDER}`, opacity: canRedo ? 1 : 0.35,
         }}>
-          <Redo2 style={{ width:16, height:16, color: TEXT_MED }} />
+          <Redo2 style={{ width:16, height:16, color:"#fff" }} />
         </button>
       </div>
 
@@ -1251,7 +1251,7 @@ const DrawingToolsSheet = memo(function DrawingToolsSheet({ onClose }: { onClose
       <div style={{ overflowY:"auto", padding:"10px 14px 8px" }}>
         {MOBILE_TOOL_GROUPS.map(group => (
           <div key={group.title} style={{ marginBottom:18 }}>
-            <p style={{ fontSize:9.5, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:"rgba(255,255,255,0.28)", margin:"0 0 9px" }}>
+            <p style={{ fontSize:9.5, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:"#fff", margin:"0 0 9px" }}>
               {group.title}
             </p>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:8 }}>
@@ -1270,11 +1270,11 @@ const DrawingToolsSheet = memo(function DrawingToolsSheet({ onClose }: { onClose
                   >
                     {tool.src ? (
                       <img src={tool.src} width={22} height={22} draggable={false}
-                        style={{ filter:"brightness(2) contrast(1.05)", opacity: active ? 1 : 0.6 }} />
+                        style={{ filter:"brightness(0) invert(1)", opacity:1 }} />
                     ) : (
                       <MousePointer style={{ width:18, height:18, color: active ? ACCENT : TEXT_MED }} />
                     )}
-                    <span style={{ fontSize:9.5, fontWeight:600, color: active ? ACCENT : TEXT_DIM, textAlign:"center", lineHeight:1.2 }}>
+                    <span style={{ fontSize:9.5, fontWeight:600, color:"#fff", textAlign:"center", lineHeight:1.2 }}>
                       {tool.label}
                     </span>
                   </button>
@@ -5604,50 +5604,6 @@ const MiniControlBar = memo(function MiniControlBar({
           <ChevronDown style={{ width:11, height:11, color: GL_TEAL, opacity:0.85 }} />
         </button>
 
-        {/* Trade button — white gloss pill */}
-        <button
-          onClick={onTrade}
-          onPointerDown={e => {
-            const el = e.currentTarget as HTMLElement;
-            el.style.transition = "transform 0.09s ease";
-            el.style.transform  = "scale(0.91)";
-          }}
-          onPointerUp={e => {
-            const el = e.currentTarget as HTMLElement;
-            el.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1)";
-            el.style.transform  = "scale(1)";
-          }}
-          onPointerCancel={e => {
-            const el = e.currentTarget as HTMLElement;
-            el.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1)";
-            el.style.transform  = "scale(1)";
-          }}
-          style={{
-            height:36, padding:"0 16px",
-            marginLeft:6,
-            borderRadius:9999, flexShrink:0,
-            display:"flex", alignItems:"center", justifyContent:"center",
-            background:"linear-gradient(180deg,#ffffff 0%,#d8d8d8 100%)",
-            border:"1px solid rgba(255,255,255,0.60)",
-            cursor:"pointer",
-            boxShadow:[
-              "0 1px 0 rgba(255,255,255,0.90) inset",
-              "0 -1px 0 rgba(0,0,0,0.18) inset",
-              "0 2px 8px rgba(0,0,0,0.35)",
-              "0 0 12px rgba(255,255,255,0.18)",
-            ].join(","),
-            position:"relative", overflow:"hidden",
-          }}
-        >
-          {/* Glossy top sheen */}
-          <span aria-hidden style={{
-            position:"absolute", top:0, left:0, right:0, height:"50%",
-            background:"linear-gradient(180deg,rgba(255,255,255,0.55) 0%,rgba(255,255,255,0.0) 100%)",
-            borderRadius:"9999px 9999px 0 0",
-            pointerEvents:"none",
-          }} />
-          <span style={{ fontSize:12.5, fontWeight:700, color:"#0a0b14", whiteSpace:"nowrap", position:"relative", letterSpacing:"0.01em" }}>Trade</span>
-        </button>
 
         {divider}
 
