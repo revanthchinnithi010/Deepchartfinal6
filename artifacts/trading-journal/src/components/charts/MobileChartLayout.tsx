@@ -987,7 +987,7 @@ function BottomSheet({
 
           {/* Left-aligned title — matches TradingView/Binance/Bybit panel style */}
           <div style={{ display:"flex", justifyContent:"flex-start", alignItems:"center", padding:"4px 18px 10px" }}>
-            <span style={{ fontSize:13, fontWeight:600, color:TEXT_HI, letterSpacing:"0.01em" }}>
+            <span style={{ fontSize:13, fontWeight:600, color:title === "Drawing Tools" ? "#fff" : TEXT_HI, letterSpacing:"0.01em" }}>
               {title}
             </span>
           </div>
