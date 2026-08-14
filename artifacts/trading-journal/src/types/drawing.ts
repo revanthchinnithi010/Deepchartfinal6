@@ -56,7 +56,7 @@ export interface DrawingStyle {
 }
 
 export const DEFAULT_STYLE: DrawingStyle = {
-  color:       "#B7FF5A",
+  color:       "#FFFFFF",
   thickness:   2,
   lineStyle:   "solid",
   fillOpacity: 0.1,
