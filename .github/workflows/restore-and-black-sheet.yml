@@ -12,12 +12,12 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: main
-          fetch-depth: 2
-      - name: Restore previous complete chart file and change sheet background
+          fetch-depth: 0
+      - name: Restore known-good chart file and change sheet background
         shell: bash
         run: |
           set -e
-          git checkout HEAD^ -- artifacts/trading-journal/src/components/charts/MobileChartLayout.tsx
+          git checkout 2a4e63b57307fd4efd97b47919a6b82dd1e2d768 -- artifacts/trading-journal/src/components/charts/MobileChartLayout.tsx
           python - <<'PY'
           from pathlib import Path
           p = Path('artifacts/trading-journal/src/components/charts/MobileChartLayout.tsx')
@@ -25,7 +25,7 @@ jobs:
           old = 'const SHEET_BG      = "#0F1618";'
           new = 'const SHEET_BG      = "#000000";'
           if old not in s:
-              raise SystemExit('Expected SHEET_BG #0F1618 not found in restored file')
+              raise SystemExit('Expected SHEET_BG #0F1618 not found in known-good file')
           p.write_text(s.replace(old, new, 1), encoding='utf-8')
           PY
       - name: Commit restored file and remove workflow
@@ -34,5 +34,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/trading-journal/src/components/charts/MobileChartLayout.tsx .github/workflows/restore-and-black-sheet.yml
           git rm .github/workflows/restore-and-black-sheet.yml
-          git commit -m "fix: restore chart file and use pure black sheet [restore-black-sheet]"
+          git commit -m "fix: use pure black drawing tools sheet [restore-black-sheet]"
           git push origin main
