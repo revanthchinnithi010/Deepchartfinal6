@@ -3,12 +3,19 @@ const FAVS_KEY = "tv_toolbar_favorites_v3";
 const LABEL_TO_KEY: Record<string, string> = {
   "Trendline": "trendline",
   "Ray": "ray",
+  "Extended": "extended",
   "Extended line": "extended",
+  "H. Line": "hline",
   "Horizontal line": "hline",
+  "H. Ray": "hray",
   "Horizontal ray": "hray",
+  "V. Line": "vline",
   "Vertical line": "vline",
+  "Channel": "channel",
   "Parallel channel": "channel",
+  "Fib Ret.": "fib",
   "Fib retracement": "fib",
+  "Fib Channel": "fib_channel",
   "Fib channel": "fib_channel",
   "Long position": "position_long",
   "Short position": "position_short",
@@ -28,75 +35,146 @@ const LABEL_TO_KEY: Record<string, string> = {
 function readFavorites(): Set<string> {
   try {
     const raw = localStorage.getItem(FAVS_KEY);
-    return new Set<string>(raw ? JSON.parse(raw) : []);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set<string>(Array.isArray(parsed) ? parsed : []);
   } catch {
     return new Set<string>();
   }
 }
 
+function writeFavorites(favorites: Set<string>) {
+  localStorage.setItem(FAVS_KEY, JSON.stringify([...favorites]));
+}
+
+function normalizeLabel(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function getButtonLabel(button: HTMLElement): string {
+  const span = button.querySelector("span");
+  return normalizeLabel(span?.textContent || button.textContent || "");
+}
+
+function getKeyForButton(button: HTMLElement): string | null {
+  const label = getButtonLabel(button);
+  return LABEL_TO_KEY[label] ?? null;
+}
+
+function findDrawingPopupFrom(start: Element): HTMLElement | null {
+  let current: Element | null = start;
+  let best: HTMLElement | null = null;
+
+  for (let depth = 0; current && depth < 12; depth++, current = current.parentElement) {
+    const el = current as HTMLElement;
+    const text = el.textContent || "";
+    if (!text.includes("Drawing Tools")) continue;
+
+    const mappedButtons = Array.from(el.querySelectorAll("button")).filter(button => {
+      return !!getKeyForButton(button as HTMLElement);
+    });
+
+    if (mappedButtons.length >= 2) {
+      best = el;
+    }
+  }
+
+  return best;
+}
+
+function findDrawingPopups(): HTMLElement[] {
+  const found = new Set<HTMLElement>();
+
+  document.querySelectorAll<HTMLElement>("[data-drawing-popup]").forEach(el => found.add(el));
+
+  document.querySelectorAll<HTMLElement>("body *").forEach(el => {
+    if (!el.textContent?.includes("Drawing Tools")) return;
+    const popup = findDrawingPopupFrom(el);
+    if (popup) found.add(popup);
+  });
+
+  return [...found];
+}
+
+function getToolButtons(popup: HTMLElement): HTMLButtonElement[] {
+  const buttons: HTMLButtonElement[] = [];
+  popup.querySelectorAll<HTMLButtonElement>("button").forEach(button => {
+    if (button.closest("[data-favorites-section]")) return;
+    if (getKeyForButton(button)) buttons.push(button);
+  });
+  return buttons;
+}
+
 function getToolRows(popup: HTMLElement): HTMLElement[] {
   const rows: HTMLElement[] = [];
-  popup.querySelectorAll<HTMLElement>("button").forEach(button => {
-    const star = button.querySelector("svg.lucide-star");
-    if (!star) return;
+  getToolButtons(popup).forEach(button => {
     const row = button.parentElement;
     if (!row || row.dataset.favRow === "true") return;
-    const toolButton = row.querySelector<HTMLButtonElement>(":scope > button");
-    if (!toolButton || toolButton === button) return;
-    const label = toolButton.querySelector("span")?.textContent?.trim();
-    if (!label || !LABEL_TO_KEY[label]) return;
     if (!rows.includes(row)) rows.push(row);
   });
   return rows;
 }
 
-function showPrompt(button: HTMLElement, label: string, onAction: () => void) {
+function showPrompt(button: HTMLButtonElement, key: string) {
   document.querySelectorAll<HTMLElement>("[data-favorite-prompt]").forEach(el => el.remove());
 
+  const isFavorite = readFavorites().has(key);
+  const label = isFavorite ? "Remove from favourites" : "Add to favourites";
   const rect = button.getBoundingClientRect();
+
   const prompt = document.createElement("button");
   prompt.type = "button";
   prompt.dataset.favoritePrompt = "true";
-  prompt.innerHTML = `<span style="font-size:16px;line-height:1">★</span><span>${label}</span>`;
+  prompt.innerHTML = `<span style="font-size:17px;line-height:1">★</span><span>${label}</span>`;
   prompt.style.cssText = [
     "position:fixed",
-    `left:${Math.max(10, Math.min(rect.left + 8, window.innerWidth - 190))}px`,
-    `top:${Math.max(8, rect.top - 46)}px`,
-    "z-index:1000000",
+    `left:${Math.max(10, Math.min(rect.left + 8, window.innerWidth - 205))}px`,
+    `top:${Math.max(10, rect.top - 50)}px`,
+    "z-index:2147483647",
     "display:flex",
     "align-items:center",
-    "gap:7px",
-    "height:36px",
-    "padding:0 12px",
-    "border:1px solid rgba(255,255,255,.14)",
-    "border-radius:9px",
-    "background:#000000",
-    "color:#ffffff",
-    "font:600 12px/1 ui-sans-serif,system-ui,sans-serif",
-    "box-shadow:0 8px 24px rgba(0,0,0,.65)",
+    "gap:8px",
+    "height:38px",
+    "padding:0 13px",
+    "border:1px solid rgba(255,255,255,.18)",
+    "border-radius:10px",
+    "background:#0b0b0d",
+    "color:#fff",
+    "font:600 13px/1 ui-sans-serif,system-ui,-apple-system,sans-serif",
+    "box-shadow:0 10px 30px rgba(0,0,0,.7)",
     "cursor:pointer",
     "touch-action:manipulation",
+    "-webkit-tap-highlight-color:transparent",
   ].join(";");
 
-  prompt.addEventListener("pointerdown", e => e.stopPropagation());
-  prompt.addEventListener("click", e => {
-    e.preventDefault();
-    e.stopPropagation();
-    onAction();
+  const activate = (event: Event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const favorites = readFavorites();
+    if (favorites.has(key)) favorites.delete(key);
+    else favorites.add(key);
+    writeFavorites(favorites);
+
     prompt.remove();
-  });
+    refreshFavorites();
+  };
+
+  prompt.addEventListener("pointerdown", e => e.stopPropagation());
+  prompt.addEventListener("click", activate);
+  prompt.addEventListener("touchend", activate, { passive: false });
   document.body.appendChild(prompt);
 
   window.setTimeout(() => {
     if (prompt.isConnected) prompt.remove();
-  }, 3000);
+  }, 3500);
 }
 
-function installLongPress(row: HTMLElement) {
-  const button = row.querySelector<HTMLButtonElement>(":scope > button");
-  if (!button || button.dataset.longPressFavoriteInstalled === "true") return;
+function installLongPress(button: HTMLButtonElement) {
+  if (button.dataset.longPressFavoriteInstalled === "true") return;
   button.dataset.longPressFavoriteInstalled = "true";
   button.style.touchAction = "manipulation";
+  button.style.webkitUserSelect = "none";
+  button.style.userSelect = "none";
 
   let timer: number | null = null;
   let longPressed = false;
@@ -108,102 +186,108 @@ function installLongPress(row: HTMLElement) {
     timer = null;
   };
 
-  button.addEventListener("pointerdown", e => {
+  button.addEventListener("pointerdown", event => {
     clearTimer();
     longPressed = false;
-    startX = e.clientX;
-    startY = e.clientY;
+    startX = event.clientX;
+    startY = event.clientY;
+
     timer = window.setTimeout(() => {
+      timer = null;
       longPressed = true;
-      const label = button.querySelector("span")?.textContent?.trim() ?? "Tool";
-      const key = LABEL_TO_KEY[label];
+      const key = getKeyForButton(button);
       if (!key) return;
-      const isFav = readFavorites().has(key);
-      showPrompt(button, isFav ? "Remove from favourites" : "Add to favourites", () => {
-        const starButton = row.querySelector<HTMLButtonElement>(":scope > button:nth-last-child(1)");
-        starButton?.click();
-        window.setTimeout(refreshFavorites, 30);
-      });
-    }, 550);
-  });
+      showPrompt(button, key);
+    }, 600);
+  }, true);
 
-  button.addEventListener("pointermove", e => {
-    if (Math.hypot(e.clientX - startX, e.clientY - startY) > 8) clearTimer();
-  });
+  button.addEventListener("pointermove", event => {
+    if (Math.hypot(event.clientX - startX, event.clientY - startY) > 12) clearTimer();
+  }, true);
 
-  button.addEventListener("pointerup", e => {
+  button.addEventListener("pointerup", event => {
     clearTimer();
     if (longPressed) {
-      e.preventDefault();
-      e.stopPropagation();
+      event.preventDefault();
+      event.stopPropagation();
+      longPressed = false;
     }
-  });
-  button.addEventListener("pointercancel", clearTimer);
-  button.addEventListener("contextmenu", e => e.preventDefault());
-  button.addEventListener("click", e => {
+  }, true);
+
+  button.addEventListener("pointercancel", clearTimer, true);
+  button.addEventListener("contextmenu", event => event.preventDefault());
+
+  button.addEventListener("click", event => {
     if (longPressed) {
-      e.preventDefault();
-      e.stopPropagation();
+      event.preventDefault();
+      event.stopPropagation();
       longPressed = false;
     }
   }, true);
 }
 
-function buildFavoritesSection(popup: HTMLElement) {
-  const scroll = popup.querySelector<HTMLElement>(":scope > div");
-  if (!scroll) return;
+function getScrollContainer(popup: HTMLElement): HTMLElement {
+  const candidates = [
+    popup.querySelector<HTMLElement>("[data-drawing-scroll]"),
+    popup.querySelector<HTMLElement>("[style*='overflow']"),
+    popup.firstElementChild as HTMLElement | null,
+  ];
+  return candidates.find(Boolean) || popup;
+}
 
-  const rows = getToolRows(popup);
-  rows.forEach(installLongPress);
+function buildFavoritesSection(popup: HTMLElement) {
+  const buttons = getToolButtons(popup);
+  buttons.forEach(installLongPress);
+
+  const favorites = readFavorites();
+  const favoriteButtons = buttons.filter(button => {
+    const key = getKeyForButton(button);
+    return !!key && favorites.has(key);
+  });
 
   let section = popup.querySelector<HTMLElement>("[data-favorites-section]");
-  const favorites = readFavorites();
-  const favoriteRows = rows.filter(row => {
-    const label = row.querySelector(":scope > button span")?.textContent?.trim();
-    return !!label && favorites.has(LABEL_TO_KEY[label]);
-  });
-  const signature = favoriteRows
-    .map(row => LABEL_TO_KEY[row.querySelector(":scope > button span")?.textContent?.trim() ?? ""])
-    .join("|");
 
-  if (!favoriteRows.length) {
+  if (!favoriteButtons.length) {
     section?.remove();
     return;
   }
 
+  const signature = favoriteButtons.map(button => getKeyForButton(button)).join("|");
   if (section?.dataset.signature === signature) return;
 
   if (!section) {
     section = document.createElement("div");
     section.dataset.favoritesSection = "true";
-    section.style.cssText = "padding:4px 0 7px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:3px;";
-    scroll.prepend(section);
+    section.style.cssText = "padding:5px 0 8px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:3px;";
+    getScrollContainer(popup).prepend(section);
   }
+
   section.dataset.signature = signature;
   section.innerHTML = "";
 
   const title = document.createElement("div");
   title.textContent = "FAVOURITES";
-  title.style.cssText = "padding:6px 12px 3px;font:800 9px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.09em;color:rgba(255,255,255,.55);text-transform:uppercase;";
+  title.style.cssText = "padding:6px 12px 5px;font:800 10px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.1em;color:rgba(255,255,255,.58);";
   section.appendChild(title);
 
-  favoriteRows.forEach(row => {
-    const originalButton = row.querySelector<HTMLButtonElement>(":scope > button");
-    if (!originalButton) return;
+  favoriteButtons.forEach(originalButton => {
+    const clone = originalButton.parentElement?.cloneNode(true) as HTMLElement | null;
+    if (!clone) return;
 
-    const clone = row.cloneNode(true) as HTMLElement;
     clone.dataset.favRow = "true";
     clone.style.background = "transparent";
     clone.style.cursor = "pointer";
-    clone.querySelectorAll("button").forEach(b => {
-      b.style.pointerEvents = "none";
-      b.tabIndex = -1;
+    clone.querySelectorAll("button").forEach(child => {
+      child.style.pointerEvents = "none";
+      child.tabIndex = -1;
     });
-    clone.addEventListener("click", e => {
-      e.preventDefault();
-      e.stopPropagation();
+
+    clone.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
       originalButton.click();
     });
+
     section!.appendChild(clone);
   });
 }
@@ -212,12 +296,11 @@ let scheduled = false;
 function refreshFavorites() {
   if (scheduled) return;
   scheduled = true;
+
   window.setTimeout(() => {
     scheduled = false;
-    document.querySelectorAll<HTMLElement>("[data-drawing-popup]").forEach(popup => {
-      if (popup.querySelector("svg.lucide-star")) buildFavoritesSection(popup);
-    });
-  }, 0);
+    findDrawingPopups().forEach(buildFavoritesSection);
+  }, 30);
 }
 
 const observer = new MutationObserver(refreshFavorites);
