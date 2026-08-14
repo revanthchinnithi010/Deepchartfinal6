@@ -24,7 +24,7 @@ jobs:
 
           # 1) Remove the Trade pill from the mobile chart control bar.
           pattern = re.compile(
-              r'\n        /\*\*?\s*Trade button — white gloss pill\s*\*/.*?\n        </button>\n\n        \{divider\}',
+              r'\n        /\*\s*Trade button — white gloss pill\s*\*/.*?\n        </button>\n\n        \{divider\}',
               re.S,
           )
           text, removed = pattern.subn('\n\n        {divider}', text, count=1)
