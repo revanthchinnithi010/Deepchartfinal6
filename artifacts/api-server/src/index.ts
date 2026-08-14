@@ -31,16 +31,27 @@ const delta             = new DeltaService(marketData);
 const alertEngine       = new AlertEngine(marketData, telegram, wsManager, candleAggregator);
 const healthMonitor     = new FeedHealthMonitor(marketData, wsManager, telegram);
 
-// These three symbols are intentionally served by Delta Exchange only for live
-// tick data. cTrader must never overwrite/compete with the Delta price stream.
-const DELTA_ONLY_LIVE_TICK_SYMBOLS = new Set(["BTCUSD", "ETHUSD", "SOLUSD"]);
+// cTrader is reserved for FX/metals/indices/energies. Crypto symbols must
+// always use the exchange/Bybit path and must never overwrite those ticks.
+const NON_CRYPTO_USD_BASES = new Set([
+  "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "CNH", "HKD", "SGD",
+  "NOK", "SEK", "DKK", "PLN", "CZK", "HUF", "ZAR", "MXN", "TRY", "ILS",
+  "AED", "SAR", "THB", "INR", "XAU", "XAG", "XPT", "XPD", "USOIL", "UKOIL",
+  "NATGAS", "WTI", "BRENT", "US500", "SPX500", "NAS100", "US30", "GER40",
+  "DE40", "UK100", "JP225", "AUS200", "FRA40", "EU50", "HK50", "STOXX50",
+]);
+
+function isCryptoSymbol(symbol: string): boolean {
+  const s = symbol.toUpperCase().trim().replace(/\.(pro|raw|ecn|std)$/i, "");
+  if (!/^[A-Z0-9]{2,12}(USD|USDT)$/.test(s)) return false;
+  const base = s.endsWith("USDT") ? s.slice(0, -4) : s.slice(0, -3);
+  return !NON_CRYPTO_USD_BASES.has(base);
+}
 
 // Batch buffer: latest price per symbol — flushed every 5 s
 const livePriceBatch = new Map<string, { price: number; provider: string }>();
 
 marketData.on("tick", (tick: ProviderTick) => {
-  // A tick causes a new candle payload to be generated. Invalidate the cached
-  // websocket payload before the aggregator emits its update.
   wsManager.clearCandleCache();
   candleAggregator.ingestTick(tick);
   wsManager.broadcast({ type: "tick", ...tick });
@@ -71,9 +82,6 @@ async function flushLivePrices(): Promise<void> {
 setInterval(() => { flushLivePrices().catch(() => {}); }, 5_000);
 
 candleAggregator.on("candle_update", (update: { symbol: string; interval: string; bar: object }) => {
-  // Authoritative cTrader trendbar updates do not pass through marketData's
-  // tick event, so the WS candle cache must also be invalidated here. Without
-  // this, the browser could keep receiving an older candle after an OHLC sync.
   wsManager.clearCandleCache();
   wsManager.broadcastCandleUpdate(update.symbol, update.interval, update.bar);
 });
@@ -86,44 +94,39 @@ marketData.on("subscription_update", (update) => wsManager.broadcast({ type: "su
 ctraderTickEngine.on("tick", (tick: CtraderTick) => {
   const symbol = tick.symbol.toUpperCase().trim();
 
-  // Hard broker boundary: BTCUSD/ETHUSD/SOLUSD must come from Delta only.
-  if (DELTA_ONLY_LIVE_TICK_SYMBOLS.has(symbol)) {
-    logger.debug({ symbol }, "cTrader tick ignored: symbol is Delta-only");
+  // Final broker boundary. Even if an old/stale cTrader subscription exists,
+  // crypto ticks are dropped before they can reach candles, alerts or the UI.
+  if (isCryptoSymbol(symbol)) {
+    logger.debug({ symbol }, "cTrader tick ignored: crypto is exchange/Bybit-only");
     return;
   }
 
-  // cTrader chart candles are quote/bid based. Use bid for candle aggregation
-  // (ask is the fallback when a broker sends an ask-only spot update).
   const chartPrice = tick.bid > 0 ? tick.bid : tick.ask > 0 ? tick.ask : tick.mid;
   if (!Number.isFinite(chartPrice) || chartPrice <= 0) return;
 
   const ctraderUnifiedTick: ProviderTick = {
-    symbol:         tick.symbol,
+    symbol: tick.symbol,
     providerSymbol: tick.symbol,
-    price:          chartPrice,
-    volume:         1,
-    timestamp:      tick.timestamp,
-    receivedAt:     Date.now(),
-    provider:       "ctrader",
+    price: chartPrice,
+    volume: 1,
+    timestamp: tick.timestamp,
+    receivedAt: Date.now(),
+    provider: "ctrader",
   };
 
-  // injectExternalTick emits the normal MarketDataService "tick" event. That
-  // single event is the canonical path into CandleAggregator, AlertEngine,
-  // persistence and the live-price broadcast. Do NOT call ingestTick again
-  // here — doing both paths duplicated every cTrader tick in the candle.
   marketData.injectExternalTick(ctraderUnifiedTick);
 
   wsManager.broadcast({
-    type:      "ctrader_tick",
-    symbol:    tick.symbol,
-    symbolId:  tick.symbolId,
-    bid:       tick.bid,
-    ask:       tick.ask,
-    spread:    tick.spread,
-    mid:       tick.mid,
-    price:     chartPrice,
+    type: "ctrader_tick",
+    symbol: tick.symbol,
+    symbolId: tick.symbolId,
+    bid: tick.bid,
+    ask: tick.ask,
+    spread: tick.spread,
+    mid: tick.mid,
+    price: chartPrice,
     timestamp: tick.timestamp,
-    provider:  "ctrader",
+    provider: "ctrader",
   });
 });
 
@@ -131,17 +134,6 @@ ctraderTickEngine.on("status", (status: EngineStatusPayload) => {
   wsManager.broadcast({ type: "ctrader_status", ...status });
 });
 
-/**
- * cTrader historical trendbars are the broker's canonical OHLC. The live tick
- * stream is still used for low-latency updates, but periodically replacing the
- * local 1m candle with the latest cTrader trendbar prevents sparse ticks,
- * dropped ticks, spread-mid differences, and boundary timing from producing
- * malformed 1m candles.
- *
- * 30s cadence is deliberately conservative: cTrader documents a 5 requests/s
- * per connection limit for historical data, so sequentially syncing the
- * watchlist stays well below that limit.
- */
 let ctraderCandleSyncRunning = false;
 async function syncCtraderOneMinuteCandles(): Promise<void> {
   if (ctraderCandleSyncRunning) return;
@@ -159,7 +151,7 @@ async function syncCtraderOneMinuteCandles(): Promise<void> {
     const seen = new Set<string>();
     for (const { symbol: rawSymbol } of items) {
       const symbol = rawSymbol.toUpperCase().trim();
-      if (seen.has(symbol) || DELTA_ONLY_LIVE_TICK_SYMBOLS.has(symbol)) continue;
+      if (seen.has(symbol) || isCryptoSymbol(symbol)) continue;
       seen.add(symbol);
 
       const row = await getCtraderSymbolRow(symbol).catch(() => null);
@@ -167,9 +159,7 @@ async function syncCtraderOneMinuteCandles(): Promise<void> {
 
       try {
         const bars = await ctraderTickEngine.fetchTrendbarsOnSession(row.symbolId, "1", 2, 8_000);
-        for (const bar of bars) {
-          candleAggregator.applyAuthoritativeBar(symbol, "1", bar);
-        }
+        for (const bar of bars) candleAggregator.applyAuthoritativeBar(symbol, "1", bar);
       } catch (err) {
         logger.debug({ symbol, err: String(err) }, "cTrader 1m candle sync skipped for symbol");
       }
@@ -183,7 +173,7 @@ async function syncCtraderOneMinuteCandles(): Promise<void> {
 
 marketData.start([]).catch(err => logger.error({ err }, "MarketDataService: async start error"));
 
-const app    = createApp({ alertEngine, marketData, healthMonitor, telegram, delta, wsManager, candleAggregator });
+const app = createApp({ alertEngine, marketData, healthMonitor, telegram, delta, wsManager, candleAggregator });
 const server = createServer(app);
 
 server.on("upgrade", (req, socket, head) => {
@@ -213,8 +203,8 @@ healthMonitor.start();
 
   await AppConfigService.injectToEnv();
   logger.info({
-    DELTA_CLIENT_ID:       process.env["DELTA_CLIENT_ID"]       ? "SET" : "NOT SET",
-    CTRADER_CLIENT_ID:     process.env["CTRADER_CLIENT_ID"]     ? `SET (${process.env["CTRADER_CLIENT_ID"]!.length} chars)` : "NOT SET ⚠️",
+    DELTA_CLIENT_ID: process.env["DELTA_CLIENT_ID"] ? "SET" : "NOT SET",
+    CTRADER_CLIENT_ID: process.env["CTRADER_CLIENT_ID"] ? `SET (${process.env["CTRADER_CLIENT_ID"]!.length} chars)` : "NOT SET ⚠️",
     CTRADER_CLIENT_SECRET: process.env["CTRADER_CLIENT_SECRET"] ? `SET (${process.env["CTRADER_CLIENT_SECRET"]!.length} chars)` : "NOT SET ⚠️",
   }, "Startup: credential injection complete — env status after inject");
 
@@ -229,6 +219,20 @@ healthMonitor.start();
   await autoStartCtraderEngine().catch((err) => logger.warn({ err }, "cTrader auto-start: unexpected error (non-fatal)"));
   subscribeWatchlistCtraderSymbols().catch((err) => logger.warn({ err }, "cTrader watchlist subscription: unexpected error (non-fatal)"));
 
+  // Remove any crypto symbols that may have been restored by an older cTrader
+  // subscription snapshot. New subscriptions are already blocked by the
+  // watchlist route, but this makes the broker boundary self-healing on restart.
+  try {
+    const status = ctraderTickEngine.getStatus();
+    for (const symbol of status.subscribedSymbols) {
+      if (!isCryptoSymbol(symbol)) continue;
+      const row = await getCtraderSymbolRow(symbol).catch(() => null);
+      if (row) ctraderTickEngine.removeSymbol(row.symbolId, row.symbolName);
+    }
+  } catch (err) {
+    logger.debug({ err: String(err) }, "cTrader crypto subscription cleanup skipped");
+  }
+
   try {
     const { db: dbClient, watchlistTable } = await import("@workspace/db");
     const { asc } = await import("drizzle-orm");
@@ -239,8 +243,6 @@ healthMonitor.start();
     logger.warn({ err }, "Startup: could not subscribe watchlist symbols — non-fatal");
   }
 
-  // Give the cTrader session time to authenticate/subscribe, then keep the
-  // broker OHLC authoritative for the 1m chart.
   setTimeout(() => {
     syncCtraderOneMinuteCandles().catch(() => {});
     setInterval(() => { syncCtraderOneMinuteCandles().catch(() => {}); }, 30_000);
