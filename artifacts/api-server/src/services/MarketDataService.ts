@@ -7,7 +7,20 @@ import { marketSubscriptionBus } from "./marketSubscriptionBus.js";
 
 export type { UnifiedTick as LatestTick };
 
-const BYBIT_SYMBOL = "FARTCOINUSD";
+function isCryptoSymbol(symbol: string): boolean {
+  const s = symbol.toUpperCase().trim().replace(/\.(pro|raw|ecn|std)$/i, "");
+  if (!/^[A-Z0-9]{2,12}(USD|USDT)$/.test(s)) return false;
+  const base = s.endsWith("USDT") ? s.slice(0, -4) : s.slice(0, -3);
+  const nonCrypto = new Set([
+    "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "CNH", "HKD", "SGD",
+    "NOK", "SEK", "DKK", "PLN", "CZK", "HUF", "ZAR", "MXN", "TRY", "ILS",
+    "AED", "SAR", "THB", "INR", "XAU", "XAG", "XPT", "XPD",
+    "USOIL", "UKOIL", "NATGAS", "WTI", "BRENT",
+    "US500", "SPX500", "NAS100", "US30", "GER40", "DE40", "UK100",
+    "JP225", "AUS200", "FRA40", "EU50", "HK50", "STOXX50",
+  ]);
+  return !nonCrypto.has(base);
+}
 
 export class MarketDataService extends EventEmitter {
   private feedManager: MarketFeedManager;
@@ -16,11 +29,14 @@ export class MarketDataService extends EventEmitter {
   constructor() {
     super();
     this.feedManager = new MarketFeedManager();
+    // Keep one dedicated Bybit linear feed for ALL crypto symbols. This avoids
+    // crypto charts being dependent on the generic multi-provider router.
     this.bybitProvider = new BybitProvider();
 
     this.bybitProvider.on("tick", (tick: UnifiedTick) => {
-      // Inject Bybit ticks into the same unified pipeline used by Delta so the
-      // chart, alerts and latest-tick cache do not need a second code path.
+      // All Bybit crypto trades enter the same unified pipeline used by the
+      // rest of the application, so candles, alerts and live-price UI share
+      // one canonical tick stream.
       this.feedManager.injectExternalTick(tick);
     });
     this.bybitProvider.on("connected", () => {
@@ -58,66 +74,114 @@ export class MarketDataService extends EventEmitter {
       this.emit("subscription_update", update);
     });
 
-    // FARTCOINUSD is intentionally removed from the Delta startup list. Its
-    // live trade stream is sourced exclusively from Bybit for this test.
-    const deltaSymbols = defaultSymbols.filter(s => s.toUpperCase() !== BYBIT_SYMBOL);
-    await this.feedManager.start(deltaSymbols);
+    // Non-crypto symbols stay on their normal Delta/provider routing.
+    // Crypto symbols are handled exclusively by the dedicated Bybit provider.
+    const nonCryptoSymbols = defaultSymbols.filter(s => !isCryptoSymbol(s));
+    await this.feedManager.start(nonCryptoSymbols);
 
-    if (defaultSymbols.some(s => s.toUpperCase() === BYBIT_SYMBOL)) {
-      this.bybitProvider.subscribe(BYBIT_SYMBOL);
-      this.bybitProvider.connect();
-      logger.info({ symbol: BYBIT_SYMBOL }, "MarketDataService: FARTCOINUSD routed to Bybit");
-    }
+    const cryptoSymbols = defaultSymbols.filter(isCryptoSymbol);
+    for (const symbol of cryptoSymbols) this.bybitProvider.subscribe(symbol);
+    if (cryptoSymbols.length > 0) this.bybitProvider.connect();
 
-    logger.info({ symbols: defaultSymbols, deltaSymbols, bybit: defaultSymbols.includes(BYBIT_SYMBOL) }, "MarketDataService: started");
+    logger.info(
+      { symbols: defaultSymbols, nonCryptoSymbols, cryptoSymbols },
+      "MarketDataService: started",
+    );
   }
 
   subscribe(symbol: string): boolean {
     const s = symbol.toUpperCase().trim();
-    if (s === BYBIT_SYMBOL) {
-      this.bybitProvider.subscribe(s);
+
+    if (isCryptoSymbol(s)) {
+      const accepted = this.bybitProvider.subscribe(s);
       if (!this.bybitProvider.isConnected()) this.bybitProvider.connect();
-      this.emit("subscription_update", { symbol: s, action: "subscribed", provider: "bybit" });
-      logger.info({ symbol: s }, "MarketDataService: routed live subscription to Bybit");
-      return true;
+      if (accepted) {
+        this.emit("subscription_update", { symbol: s, action: "subscribed", provider: "bybit" });
+        logger.info({ symbol: s }, "MarketDataService: routed crypto live subscription to dedicated Bybit feed");
+      }
+      return accepted;
     }
+
     return this.feedManager.subscribe(s);
   }
 
   unsubscribe(symbol: string): boolean {
     const s = symbol.toUpperCase().trim();
-    if (s === BYBIT_SYMBOL) {
-      this.bybitProvider.unsubscribe(s);
-      this.emit("subscription_update", { symbol: s, action: "unsubscribed", provider: "bybit" });
-      return true;
+
+    if (isCryptoSymbol(s)) {
+      const accepted = this.bybitProvider.unsubscribe(s);
+      if (accepted) {
+        this.emit("subscription_update", { symbol: s, action: "unsubscribed", provider: "bybit" });
+      }
+      return accepted;
     }
+
     return this.feedManager.unsubscribe(s);
   }
 
-  getLatestTick(symbol: string): UnifiedTick | undefined { return this.feedManager.getLatestTick(symbol); }
-  getAllLatestTicks(): Record<string, UnifiedTick> { return this.feedManager.getAllLatestTicks(); }
-  getTickHistory(symbol: string): UnifiedTick[] { return this.feedManager.getTickHistory(symbol); }
+  getLatestTick(symbol: string): UnifiedTick | undefined {
+    return this.feedManager.getLatestTick(symbol);
+  }
+
+  getAllLatestTicks(): Record<string, UnifiedTick> {
+    return this.feedManager.getAllLatestTicks();
+  }
+
+  getTickHistory(symbol: string): UnifiedTick[] {
+    return this.feedManager.getTickHistory(symbol);
+  }
+
   getSubscriptions(): string[] {
     const subscriptions = this.feedManager.getSubscriptions();
-    return this.bybitProvider.getStats().subscriptions.includes(BYBIT_SYMBOL)
-      ? [...subscriptions, BYBIT_SYMBOL]
-      : subscriptions;
+    const cryptoSubscriptions = this.bybitProvider.getStats().subscriptions;
+    return [...new Set([...subscriptions, ...cryptoSubscriptions])];
   }
-  getSupportedSymbols(): string[] { return [...this.feedManager.getSupportedSymbols(), BYBIT_SYMBOL]; }
-  getProviderStats(): ProviderStats[] { return [...this.feedManager.getProviderStats(), this.bybitProvider.getStats()]; }
-  getFeedManagerStats() { return this.feedManager.getFeedManagerStats(); }
+
+  getSupportedSymbols(): string[] {
+    return [...new Set([...this.feedManager.getSupportedSymbols(), ...this.bybitProvider.supportedSymbols])];
+  }
+
+  getProviderStats(): ProviderStats[] {
+    // The generic feed manager also owns a Bybit provider instance, but crypto
+    // subscriptions are intentionally isolated to this dedicated provider.
+    return [...this.feedManager.getProviderStats(), this.bybitProvider.getStats()];
+  }
+
+  getFeedManagerStats() {
+    return this.feedManager.getFeedManagerStats();
+  }
+
   getProviderForSymbol(symbol: string): string | undefined {
-    return symbol.toUpperCase().trim() === BYBIT_SYMBOL ? "bybit" : this.feedManager.getProviderForSymbol(symbol);
+    return isCryptoSymbol(symbol) ? "bybit" : this.feedManager.getProviderForSymbol(symbol);
   }
-  isConnected(): boolean { return this.feedManager.isAnyConnected() || this.bybitProvider.isConnected(); }
-  isFeedEnabled(): boolean { return this.feedManager.isFeedEnabled() || this.bybitProvider.isConnected(); }
 
-  enableDelta(symbols: string[]): void { this.feedManager.enableDelta(symbols.filter(s => s.toUpperCase() !== BYBIT_SYMBOL)); }
-  disableDelta(): void { this.feedManager.disableDelta(); }
+  isConnected(): boolean {
+    return this.feedManager.isAnyConnected() || this.bybitProvider.isConnected();
+  }
 
-  injectExternalTick(tick: UnifiedTick): void { this.feedManager.injectExternalTick(tick); }
-  getSymbolService() { return this.feedManager.symbolService; }
-  getDiagnostics() { return this.feedManager.getDiagnostics(); }
+  isFeedEnabled(): boolean {
+    return this.feedManager.isFeedEnabled() || this.bybitProvider.isConnected();
+  }
+
+  enableDelta(symbols: string[]): void {
+    this.feedManager.enableDelta(symbols.filter(s => !isCryptoSymbol(s)));
+  }
+
+  disableDelta(): void {
+    this.feedManager.disableDelta();
+  }
+
+  injectExternalTick(tick: UnifiedTick): void {
+    this.feedManager.injectExternalTick(tick);
+  }
+
+  getSymbolService() {
+    return this.feedManager.symbolService;
+  }
+
+  getDiagnostics() {
+    return this.feedManager.getDiagnostics();
+  }
 
   stop(): void {
     this.bybitProvider.destroy();
