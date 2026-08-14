@@ -1,4 +1,4 @@
-const FAVS_KEY = "tv_toolbar_favorites_v3";
+const FAVS_KEY = "tv_toolbar_favorites_v4";
 
 const LABEL_TO_KEY: Record<string, string> = {
   "Trendline": "trendline",
@@ -17,7 +17,9 @@ const LABEL_TO_KEY: Record<string, string> = {
   "Fib retracement": "fib",
   "Fib Channel": "fib_channel",
   "Fib channel": "fib_channel",
+  "Long Pos.": "position_long",
   "Long position": "position_long",
+  "Short Pos.": "position_short",
   "Short position": "position_short",
   "Date Range": "date_range",
   "Price Range": "price_range",
@@ -70,7 +72,6 @@ function findDrawingPopupFrom(start: Element): HTMLElement | null {
       return !!getKeyForButton(button as HTMLElement);
     });
 
-    // Return the closest matching sheet/container, not <body>.
     if (mappedButtons.length >= 2) return el;
   }
 
@@ -93,10 +94,16 @@ function findDrawingPopups(): HTMLElement[] {
 
 function getToolButtons(popup: HTMLElement): HTMLButtonElement[] {
   const buttons: HTMLButtonElement[] = [];
+  const seenKeys = new Set<string>();
+
   popup.querySelectorAll<HTMLButtonElement>("button").forEach(button => {
     if (button.closest("[data-favorites-section]")) return;
-    if (getKeyForButton(button)) buttons.push(button);
+    const key = getKeyForButton(button);
+    if (!key || seenKeys.has(key)) return;
+    seenKeys.add(key);
+    buttons.push(button);
   });
+
   return buttons;
 }
 
