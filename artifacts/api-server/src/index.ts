@@ -48,7 +48,6 @@ function isCryptoSymbol(symbol: string): boolean {
   return !NON_CRYPTO_USD_BASES.has(base);
 }
 
-// Batch buffer: latest price per symbol — flushed every 5 s
 const livePriceBatch = new Map<string, { price: number; provider: string }>();
 
 marketData.on("tick", (tick: ProviderTick) => {
@@ -66,13 +65,10 @@ async function flushLivePrices(): Promise<void> {
     const { db: dbClient, livePricesTable } = await import("@workspace/db");
     const { sql } = await import("drizzle-orm");
     for (const [symbol, { price, provider }] of entries) {
-      await dbClient
-        .insert(livePricesTable)
-        .values({ symbol, price, provider, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: livePricesTable.symbol,
-          set: { price, provider, updatedAt: sql`NOW()` },
-        });
+      await dbClient.insert(livePricesTable).values({ symbol, price, provider, updatedAt: new Date() }).onConflictDoUpdate({
+        target: livePricesTable.symbol,
+        set: { price, provider, updatedAt: sql`NOW()` },
+      });
     }
   } catch (err) {
     logger.warn({ err }, "live_prices: batch flush error (non-fatal)");
@@ -90,7 +86,6 @@ marketData.on("feed_status", (status) => wsManager.broadcast({ type: "feed_statu
 marketData.on("provider_status", (status) => wsManager.broadcast({ type: "provider_status", ...status }));
 marketData.on("subscription_update", (update) => wsManager.broadcast({ type: "subscription_update", ...update }));
 
-// ── cTrader tick engine → MarketDataService → CandleAggregator + WebSocket
 ctraderTickEngine.on("tick", (tick: CtraderTick) => {
   const symbol = tick.symbol.toUpperCase().trim();
 
@@ -143,20 +138,14 @@ async function syncCtraderOneMinuteCandles(): Promise<void> {
   try {
     const { db: dbClient, watchlistTable } = await import("@workspace/db");
     const { asc } = await import("drizzle-orm");
-    const items = await dbClient
-      .select({ symbol: watchlistTable.symbol })
-      .from(watchlistTable)
-      .orderBy(asc(watchlistTable.position));
-
+    const items = await dbClient.select({ symbol: watchlistTable.symbol }).from(watchlistTable).orderBy(asc(watchlistTable.position));
     const seen = new Set<string>();
     for (const { symbol: rawSymbol } of items) {
       const symbol = rawSymbol.toUpperCase().trim();
       if (seen.has(symbol) || isCryptoSymbol(symbol)) continue;
       seen.add(symbol);
-
       const row = await getCtraderSymbolRow(symbol).catch(() => null);
       if (!row) continue;
-
       try {
         const bars = await ctraderTickEngine.fetchTrendbarsOnSession(row.symbolId, "1", 2, 8_000);
         for (const bar of bars) candleAggregator.applyAuthoritativeBar(symbol, "1", bar);
@@ -213,15 +202,14 @@ healthMonitor.start();
     delta.init().then(() => logger.info("DeltaService: init complete")),
   ]).catch((err) => logger.warn({ err }, "Service init warning"));
 
-  alertEngine.start().then(() => logger.info("AlertEngine: started"))
-    .catch((err) => logger.error({ err }, "AlertEngine: failed to start"));
+  alertEngine.start().then(() => logger.info("AlertEngine: started")).catch((err) => logger.error({ err }, "AlertEngine: failed to start"));
 
   await autoStartCtraderEngine().catch((err) => logger.warn({ err }, "cTrader auto-start: unexpected error (non-fatal)"));
-  subscribeWatchlistCtraderSymbols().catch((err) => logger.warn({ err }, "cTrader watchlist subscription: unexpected error (non-fatal)"));
 
-  // Remove any crypto symbols that may have been restored by an older cTrader
-  // subscription snapshot. New subscriptions are already blocked by the
-  // watchlist route, but this makes the broker boundary self-healing on restart.
+  // Wait until the watchlist restoration finishes before cleaning crypto
+  // subscriptions. This is important: the restore operation is asynchronous.
+  await subscribeWatchlistCtraderSymbols().catch((err) => logger.warn({ err }, "cTrader watchlist subscription: unexpected error (non-fatal)"));
+
   try {
     const status = ctraderTickEngine.getStatus();
     for (const symbol of status.subscribedSymbols) {
