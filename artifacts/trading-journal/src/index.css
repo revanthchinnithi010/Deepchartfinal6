@@ -49,3 +49,23 @@
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
+
+/* ── Mobile chart Tools control: never consume the leftover flex space ── */
+@media (max-width: 768px) {
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil) {
+    flex: 0 0 112px !important;
+    width: 112px !important;
+    min-width: 112px !important;
+    max-width: 112px !important;
+    height: 44px !important;
+    padding: 0 12px !important;
+    gap: 7px !important;
+    box-sizing: border-box !important;
+  }
+
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil) svg {
+    width: 17px !important;
+    height: 17px !important;
+    flex: 0 0 17px !important;
+  }
+}
