@@ -7,13 +7,30 @@ import { ctraderTickEngine } from "../services/CtraderTickEngine.js";
 import { getCtraderSymbolRow } from "./ctrader_spots.js";
 
 const PROVIDER_MAP: Record<string, string> = {
-  NAS100: "ctrader", US30: "ctrader",   XAUUSD: "ctrader",  XAGUSD: "ctrader",
-  EURUSD: "ctrader", GBPUSD: "ctrader", GBPJPY: "ctrader",  USDJPY: "ctrader",
-  AUDUSD: "ctrader", USDCAD: "ctrader", USOIL: "ctrader",   UKOIL: "ctrader",
+  NAS100: "ctrader", US30: "ctrader", XAUUSD: "ctrader", XAGUSD: "ctrader",
+  EURUSD: "ctrader", GBPUSD: "ctrader", GBPJPY: "ctrader", USDJPY: "ctrader",
+  AUDUSD: "ctrader", USDCAD: "ctrader", USOIL: "ctrader", UKOIL: "ctrader",
   SPX500: "ctrader", DE40: "ctrader",
-  BTCUSD: "delta",   ETHUSD: "delta",   SOLUSD: "delta",
-  DOGEUSD: "delta",  PEPEUSD: "delta",
+  BTCUSD: "delta", ETHUSD: "delta", SOLUSD: "delta",
+  DOGEUSD: "delta", PEPEUSD: "delta",
 };
+
+// Crypto symbols must never enter the cTrader subscription path. cTrader
+// remains the source for FX, metals, indices and energies.
+const NON_CRYPTO_USD_BASES = new Set([
+  "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "CNH", "HKD", "SGD",
+  "NOK", "SEK", "DKK", "PLN", "CZK", "HUF", "ZAR", "MXN", "TRY", "ILS",
+  "AED", "SAR", "THB", "INR", "XAU", "XAG", "XPT", "XPD", "USOIL", "UKOIL",
+  "NATGAS", "WTI", "BRENT", "US500", "SPX500", "NAS100", "US30", "GER40",
+  "DE40", "UK100", "JP225", "AUS200", "FRA40", "EU50", "HK50", "STOXX50",
+]);
+
+function isCryptoSymbol(symbol: string): boolean {
+  const s = symbol.toUpperCase().trim().replace(/\.(pro|raw|ecn|std)$/i, "");
+  if (!/^[A-Z0-9]{2,12}(USD|USDT)$/.test(s)) return false;
+  const base = s.endsWith("USDT") ? s.slice(0, -4) : s.slice(0, -3);
+  return !NON_CRYPTO_USD_BASES.has(base);
+}
 
 const AddSymbolBody = z.object({
   symbol: z.string().toUpperCase(),
@@ -22,7 +39,7 @@ const AddSymbolBody = z.object({
 
 const UpdateBody = z.object({
   isFavorite: z.boolean().optional(),
-  position:   z.number().int().min(0).optional(),
+  position: z.number().int().min(0).optional(),
 });
 
 const IdParam = z.object({ id: z.coerce.number().int().positive() });
@@ -45,7 +62,7 @@ export function createWatchlistRouter(marketData: MarketDataService): IRouter {
     const parsed = AddSymbolBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    const sym      = parsed.data.symbol;
+    const sym = parsed.data.symbol;
     const provider = PROVIDER_MAP[sym] ?? "delta";
     try {
       const existing = await db.select().from(watchlistTable).where(eq(watchlistTable.symbol, sym));
@@ -53,23 +70,23 @@ export function createWatchlistRouter(marketData: MarketDataService): IRouter {
 
       const allItems = await db.select().from(watchlistTable);
       const [item] = await db.insert(watchlistTable).values({
-        symbol:     sym,
+        symbol: sym,
         provider,
         isFavorite: parsed.data.isFavorite,
-        position:   allItems.length,
+        position: allItems.length,
       }).returning();
 
-      // Subscribe to market feed (non-cTrader providers)
+      // Exchange/general market subscription. Crypto is explicitly excluded
+      // from the cTrader path below.
       marketData.subscribe(sym);
 
-      // Subscribe to cTrader spot feed if this symbol is in the cTrader catalog
-      getCtraderSymbolRow(sym)
-        .then(row => {
-          if (row) {
-            ctraderTickEngine.addSymbol(row.symbolId, row.symbolName);
-          }
-        })
-        .catch(() => { /* non-fatal */ });
+      if (!isCryptoSymbol(sym)) {
+        getCtraderSymbolRow(sym)
+          .then(row => {
+            if (row) ctraderTickEngine.addSymbol(row.symbolId, row.symbolName);
+          })
+          .catch(() => { /* non-fatal */ });
+      }
 
       res.status(201).json(serialize(item));
     } catch (err: unknown) {
@@ -98,17 +115,15 @@ export function createWatchlistRouter(marketData: MarketDataService): IRouter {
       const [item] = await db.delete(watchlistTable).where(eq(watchlistTable.id, params.data.id)).returning();
       if (!item) { res.status(404).json({ error: "Not found" }); return; }
 
-      // Unsubscribe from general market feed
       marketData.unsubscribe(item.symbol);
 
-      // Unsubscribe from cTrader spot feed if applicable
-      getCtraderSymbolRow(item.symbol)
-        .then(row => {
-          if (row) {
-            ctraderTickEngine.removeSymbol(row.symbolId, row.symbolName);
-          }
-        })
-        .catch(() => { /* non-fatal */ });
+      if (!isCryptoSymbol(item.symbol)) {
+        getCtraderSymbolRow(item.symbol)
+          .then(row => {
+            if (row) ctraderTickEngine.removeSymbol(row.symbolId, row.symbolName);
+          })
+          .catch(() => { /* non-fatal */ });
+      }
 
       res.sendStatus(204);
     } catch { res.status(500).json({ error: "Failed to remove from watchlist" }); }
