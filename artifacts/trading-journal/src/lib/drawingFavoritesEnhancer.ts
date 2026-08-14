@@ -56,29 +56,25 @@ function getButtonLabel(button: HTMLElement): string {
 }
 
 function getKeyForButton(button: HTMLElement): string | null {
-  const label = getButtonLabel(button);
-  return LABEL_TO_KEY[label] ?? null;
+  return LABEL_TO_KEY[getButtonLabel(button)] ?? null;
 }
 
 function findDrawingPopupFrom(start: Element): HTMLElement | null {
   let current: Element | null = start;
-  let best: HTMLElement | null = null;
 
   for (let depth = 0; current && depth < 12; depth++, current = current.parentElement) {
     const el = current as HTMLElement;
-    const text = el.textContent || "";
-    if (!text.includes("Drawing Tools")) continue;
+    if (!(el.textContent || "").includes("Drawing Tools")) continue;
 
     const mappedButtons = Array.from(el.querySelectorAll("button")).filter(button => {
       return !!getKeyForButton(button as HTMLElement);
     });
 
-    if (mappedButtons.length >= 2) {
-      best = el;
-    }
+    // Return the closest matching sheet/container, not <body>.
+    if (mappedButtons.length >= 2) return el;
   }
 
-  return best;
+  return null;
 }
 
 function findDrawingPopups(): HTMLElement[] {
@@ -102,16 +98,6 @@ function getToolButtons(popup: HTMLElement): HTMLButtonElement[] {
     if (getKeyForButton(button)) buttons.push(button);
   });
   return buttons;
-}
-
-function getToolRows(popup: HTMLElement): HTMLElement[] {
-  const rows: HTMLElement[] = [];
-  getToolButtons(popup).forEach(button => {
-    const row = button.parentElement;
-    if (!row || row.dataset.favRow === "true") return;
-    if (!rows.includes(row)) rows.push(row);
-  });
-  return rows;
 }
 
 function showPrompt(button: HTMLButtonElement, key: string) {
@@ -161,7 +147,6 @@ function showPrompt(button: HTMLButtonElement, key: string) {
 
   prompt.addEventListener("pointerdown", e => e.stopPropagation());
   prompt.addEventListener("click", activate);
-  prompt.addEventListener("touchend", activate, { passive: false });
   document.body.appendChild(prompt);
 
   window.setTimeout(() => {
@@ -196,8 +181,7 @@ function installLongPress(button: HTMLButtonElement) {
       timer = null;
       longPressed = true;
       const key = getKeyForButton(button);
-      if (!key) return;
-      showPrompt(button, key);
+      if (key) showPrompt(button, key);
     }, 600);
   }, true);
 
@@ -227,12 +211,13 @@ function installLongPress(button: HTMLButtonElement) {
 }
 
 function getScrollContainer(popup: HTMLElement): HTMLElement {
-  const candidates = [
-    popup.querySelector<HTMLElement>("[data-drawing-scroll]"),
-    popup.querySelector<HTMLElement>("[style*='overflow']"),
-    popup.firstElementChild as HTMLElement | null,
-  ];
-  return candidates.find(Boolean) || popup;
+  const marked = popup.querySelector<HTMLElement>("[data-drawing-scroll]");
+  if (marked) return marked;
+
+  const overflow = popup.querySelector<HTMLElement>("[style*='overflow']");
+  if (overflow) return overflow;
+
+  return popup.firstElementChild instanceof HTMLElement ? popup.firstElementChild : popup;
 }
 
 function buildFavoritesSection(popup: HTMLElement) {
