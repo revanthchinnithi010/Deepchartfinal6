@@ -1,4 +1,4 @@
-const FAVS_KEY = "tv_toolbar_favorites_v4";
+const FAVS_KEY = "tv_toolbar_favorites_v5";
 
 const LABEL_TO_KEY: Record<string, string> = {
   "Trendline": "trendline",
@@ -53,8 +53,8 @@ function normalizeLabel(value: string): string {
 }
 
 function getButtonLabel(button: HTMLElement): string {
-  const span = button.querySelector("span");
-  return normalizeLabel(span?.textContent || button.textContent || "");
+  const label = button.querySelector<HTMLElement>("[data-tool-label], span:last-child");
+  return normalizeLabel(label?.textContent || button.textContent || "");
 }
 
 function getKeyForButton(button: HTMLElement): string | null {
@@ -262,17 +262,21 @@ function buildFavoritesSection(popup: HTMLElement) {
   title.style.cssText = "padding:6px 12px 5px;font:800 10px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.1em;color:rgba(255,255,255,.58);";
   section.appendChild(title);
 
-  favoriteButtons.forEach(originalButton => {
-    const clone = originalButton.parentElement?.cloneNode(true) as HTMLElement | null;
-    if (!clone) return;
+  const grid = document.createElement("div");
+  grid.dataset.favoritesGrid = "true";
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 8px;";
+  section.appendChild(grid);
 
-    clone.dataset.favRow = "true";
-    clone.style.background = "transparent";
+  // IMPORTANT: clone only the individual tool button, never its parent row.
+  // Cloning the parent row was the reason favouriting one line displayed every
+  // tool from that row (Trendline + Ray + Extended + H. Line, etc.).
+  favoriteButtons.forEach(originalButton => {
+    const clone = originalButton.cloneNode(true) as HTMLButtonElement;
+    clone.dataset.favTool = "true";
+    clone.removeAttribute("disabled");
     clone.style.cursor = "pointer";
-    clone.querySelectorAll("button").forEach(child => {
-      child.style.pointerEvents = "none";
-      child.tabIndex = -1;
-    });
+    clone.style.pointerEvents = "auto";
+    clone.tabIndex = 0;
 
     clone.addEventListener("click", event => {
       event.preventDefault();
@@ -280,7 +284,7 @@ function buildFavoritesSection(popup: HTMLElement) {
       originalButton.click();
     });
 
-    section!.appendChild(clone);
+    grid.appendChild(clone);
   });
 }
 
