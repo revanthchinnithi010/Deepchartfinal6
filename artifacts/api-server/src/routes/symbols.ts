@@ -12,6 +12,11 @@ import { pool } from "@workspace/db";
  */
 type CtraderCategory = "forex" | "index" | "commodity" | "crypto" | "stock" | "other";
 
+// These crypto contracts are Bybit WebSocket only in the app.
+// Do not expose same-named cTrader catalog entries because the frontend
+// uses broker catalog presence to resolve the watchlist provider.
+const BYBIT_ONLY_CRYPTO_SYMBOLS = new Set(["BTCUSD", "ETHUSD", "SOLUSD"]);
+
 function inferCtraderType(symbolName: string): CtraderCategory {
   const s = symbolName.toUpperCase();
   // Precious metals / commodities (before forex check to avoid XAU → forex)
@@ -62,19 +67,21 @@ export function createSymbolsRouter(marketData: MarketDataService): IRouter {
         const symbols = (rows.rows as Array<{
           symbol_id: number; symbol_name: string; description: string;
           pip_position: number; digits: number;
-        }>).map(r => {
-          const cat = inferCtraderType(r.symbol_name);
-          return {
-            symbol:       r.symbol_name,
-            name:         r.description || r.symbol_name,
-            contractType: cat,
-            category:     cat,
-            broker:       "ctrader",
-            underlying:   r.symbol_name.length >= 6 ? r.symbol_name.slice(0, 3) : r.symbol_name,
-            quoteAsset:   r.symbol_name.length >= 6 ? r.symbol_name.slice(-3) : "",
-            active:       true,
-          };
-        });
+        }>)
+          .filter(r => !BYBIT_ONLY_CRYPTO_SYMBOLS.has(r.symbol_name.toUpperCase().trim()))
+          .map(r => {
+            const cat = inferCtraderType(r.symbol_name);
+            return {
+              symbol:       r.symbol_name,
+              name:         r.description || r.symbol_name,
+              contractType: cat,
+              category:     cat,
+              broker:       "ctrader",
+              underlying:   r.symbol_name.length >= 6 ? r.symbol_name.slice(0, 3) : r.symbol_name,
+              quoteAsset:   r.symbol_name.length >= 6 ? r.symbol_name.slice(-3) : "",
+              active:       true,
+            };
+          });
         res.json({ broker: "ctrader", count: symbols.length, symbols });
         return;
       }
