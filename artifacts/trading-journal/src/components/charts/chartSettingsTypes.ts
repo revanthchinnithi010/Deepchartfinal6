@@ -49,7 +49,7 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   crosshairColor:  "rgba(255,255,255,0.5)",
   crosshairStyle:  "solid",
   crosshairWidth:  1,
-  textColor:       "rgba(255,255,255,0.85)",
+  textColor:       "#ffffff",
   fontSize:        11,
   linesColor:      "rgba(255,255,255,0.08)",
   gridColor:            "rgba(255,255,255,0.08)",
@@ -63,7 +63,8 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   precision:       "2",
   scaleMode:       "normal",
   priceScaleAutoScale: true,
-  priceLabelBullColor:  "#B7FF5A",
+  // Live price label must use the exact same bullish/bearish colors as candles.
+  priceLabelBullColor:  "#22c55e",
   priceLabelBearColor:  "#ef4444",
   priceLabelTextColor:  "#ffffff",
   priceLabelLineColor:  "rgba(255,255,255,0.4)",
