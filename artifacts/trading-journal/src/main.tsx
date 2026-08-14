@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import "./index.css";
+import "./lib/drawingFavoritesEnhancer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PinGate } from "./components/PinGate";
 import { installApiBaseUrl } from "./lib/installApiBaseUrl";
