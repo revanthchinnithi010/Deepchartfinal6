@@ -61,11 +61,29 @@
     padding: 0 10px !important;
     gap: 6px !important;
     box-sizing: border-box !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-color: #ffffff !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
   }
 
   .tj-ctrl-bar-inner button:has(> svg.lucide-pencil) svg {
     width: 16px !important;
     height: 16px !important;
     flex: 0 0 16px !important;
+    color: #000000 !important;
+    stroke: #000000 !important;
+    filter: none !important;
+  }
+
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil):hover,
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil):active,
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil):focus {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-color: #ffffff !important;
+    box-shadow: none !important;
+    filter: none !important;
   }
 }
