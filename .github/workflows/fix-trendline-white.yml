@@ -1,39 +1,25 @@
 name: Fix trendline white and selection glow
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 permissions:
   contents: write
 jobs:
   fix:
-    if: "!contains(github.event.head_commit.message, '[trendline-white-fix]')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Apply trendline styling fixes
+      - name: Apply fixes
         shell: bash
         run: |
           set -e
           python - <<'PY'
           from pathlib import Path
-
-          # Canvas renderer: pure-white default trendline selection with no glow/shadow.
-          p = Path('artifacts/trading-journal/src/components/charts/drawingCanvasRenderer.ts')
-          s = p.read_text(encoding='utf-8')
-
-          old = '''    if (isSelected && toolType !== "position_long" && toolType !== "position_short") {
-      ctx.shadowColor  = col;
-      ctx.shadowBlur   = 8;
-    }'''
-          new = '''    if (isSelected && toolType !== "position_long" && toolType !== "position_short" && toolType !== "trendline") {
-      ctx.shadowColor  = col;
-      ctx.shadowBlur   = 8;
-    }'''
-          if old not in s:
-              raise SystemExit('Canvas selection shadow block not found')
-          s = s.replace(old, new, 1)
-
-          old = '''        if (isSelected) {
+          p=Path('artifacts/trading-journal/src/components/charts/drawingCanvasRenderer.ts')
+          s=p.read_text()
+          s=s.replace('if (isSelected && toolType !== "position_long" && toolType !== "position_short") {','if (isSelected && toolType !== "position_long" && toolType !== "position_short" && toolType !== "trendline") {',2)
+          glow='''        if (isSelected) {
           ctx.save();
           ctx.shadowBlur  = 0;
           ctx.strokeStyle = col;
@@ -43,60 +29,27 @@ jobs:
           ctx.restore();
         }
         drawLine(ctx, a, b);'''
-          new = '''        drawLine(ctx, a, b);'''
-          if old not in s:
-              raise SystemExit('Main canvas trendline glow block not found')
-          s = s.replace(old, new, 1)
-
-          old = '''        if (isSelected && toolType !== "position_long" && toolType !== "position_short") {
-          ctx.shadowColor = col;
-          ctx.shadowBlur  = 8;
-        }'''
-          new = '''        if (isSelected && toolType !== "position_long" && toolType !== "position_short" && toolType !== "trendline") {
-          ctx.shadowColor = col;
-          ctx.shadowBlur  = 8;
-        }'''
-          if old not in s:
-              raise SystemExit('Anchor-drag selection shadow block not found')
-          s = s.replace(old, new, 1)
-
-          old = '''              if (isSelected) {
+          s=s.replace(glow,'        drawLine(ctx, a, b);',1)
+          glow2='''              if (isSelected) {
                 ctx.save(); ctx.shadowBlur = 0; ctx.strokeStyle = col;
                 ctx.lineWidth = sw + 7; ctx.globalAlpha *= 0.2;
                 drawLine(ctx, a, b); ctx.restore();
               }
               drawLine(ctx, a, b);'''
-          new = '''              drawLine(ctx, a, b);'''
-          if old not in s:
-              raise SystemExit('Anchor-drag trendline glow block not found')
-          s = s.replace(old, new, 1)
-          p.write_text(s, encoding='utf-8')
-
-          # SVG fallback/selected rendering: remove the explicit blue trendline glow.
-          p = Path('artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx')
-          s = p.read_text(encoding='utf-8')
-
-          old = '''    if (!isSelected) return null;
-    if (shape === true) {'''
-          new = '''    if (!isSelected || toolType === "trendline") return null;
-    if (shape === true) {'''
-          if old not in s:
-              raise SystemExit('SVG Glow helper guard not found')
-          s = s.replace(old, new, 1)
-
-          old = '''          {isSelected && (
+          s=s.replace(glow2,'              drawLine(ctx, a, b);',1)
+          p.write_text(s)
+          p=Path('artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx')
+          s=p.read_text()
+          s=s.replace('if (!isSelected) return null;','if (!isSelected || toolType === "trendline") return null;',1)
+          blue='''          {isSelected && (
             <path d={d} stroke="#3b82f6" strokeWidth={Math.max(sw + 16, 20)}
               fill="none" strokeLinecap="round" opacity={0.10} />
           )}
           <Glow d={d} />'''
-          new = '''          <Glow d={d} />'''
-          if old not in s:
-              raise SystemExit('SVG explicit trendline glow block not found')
-          s = s.replace(old, new, 1)
-          p.write_text(s, encoding='utf-8')
+          s=s.replace(blue,'          <Glow d={d} />',1)
+          p.write_text(s)
           PY
-
-      - name: Commit changes and remove one-shot workflow
+      - name: Commit and remove one-shot workflow
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
