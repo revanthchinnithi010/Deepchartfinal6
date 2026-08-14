@@ -50,22 +50,22 @@
   }
 }
 
-/* ── Mobile chart Tools control: never consume the leftover flex space ── */
+/* ── Mobile chart Tools control: compact fixed size ── */
 @media (max-width: 768px) {
   .tj-ctrl-bar-inner button:has(> svg.lucide-pencil) {
-    flex: 0 0 112px !important;
-    width: 112px !important;
-    min-width: 112px !important;
-    max-width: 112px !important;
-    height: 44px !important;
-    padding: 0 12px !important;
-    gap: 7px !important;
+    flex: 0 0 100px !important;
+    width: 100px !important;
+    min-width: 100px !important;
+    max-width: 100px !important;
+    height: 40px !important;
+    padding: 0 10px !important;
+    gap: 6px !important;
     box-sizing: border-box !important;
   }
 
   .tj-ctrl-bar-inner button:has(> svg.lucide-pencil) svg {
-    width: 17px !important;
-    height: 17px !important;
-    flex: 0 0 17px !important;
+    width: 16px !important;
+    height: 16px !important;
+    flex: 0 0 16px !important;
   }
 }
