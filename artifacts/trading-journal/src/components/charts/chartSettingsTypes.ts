@@ -21,7 +21,7 @@ export interface ChartSettings {
   panelBorderVisible:  boolean;
   panelBorderColor:    string;
   panelBorderThickness: number;
-  gridVisible:         boolean;
+  gridVisible:          boolean;
   crosshair:       "normal" | "magnet";
   precision:       "2" | "4" | "5" | "8";
   scaleMode:       "normal" | "log" | "percent" | "indexed";
@@ -33,12 +33,15 @@ export interface ChartSettings {
 }
 
 export const DEFAULT_CHART_SETTINGS: ChartSettings = {
-  upColor:         "#C28D39",
-  downColor:       "#EFE5D2",
-  upBorderColor:   "#C28D39",
-  downBorderColor: "#EFE5D2",
-  upWickColor:     "#C28D39",
-  downWickColor:   "#EFE5D2",
+  // Standard trading-chart candle palette: bullish = green, bearish = red.
+  // Keep border + wick colors synchronized with the body so every candle has
+  // a clean, consistent silhouette on the dark chart background.
+  upColor:         "#22c55e",
+  downColor:       "#ef4444",
+  upBorderColor:   "#22c55e",
+  downBorderColor: "#ef4444",
+  upWickColor:     "#22c55e",
+  downWickColor:   "#ef4444",
   timezone:        "UTC",
   bgColor:         "#000000",
   bgType:          "solid",
