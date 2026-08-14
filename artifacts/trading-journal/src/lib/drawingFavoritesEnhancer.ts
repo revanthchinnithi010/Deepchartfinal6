@@ -162,11 +162,16 @@ function buildFavoritesSection(popup: HTMLElement) {
     const label = row.querySelector(":scope > button span")?.textContent?.trim();
     return !!label && favorites.has(LABEL_TO_KEY[label]);
   });
+  const signature = favoriteRows
+    .map(row => LABEL_TO_KEY[row.querySelector(":scope > button span")?.textContent?.trim() ?? ""])
+    .join("|");
 
   if (!favoriteRows.length) {
     section?.remove();
     return;
   }
+
+  if (section?.dataset.signature === signature) return;
 
   if (!section) {
     section = document.createElement("div");
@@ -174,7 +179,7 @@ function buildFavoritesSection(popup: HTMLElement) {
     section.style.cssText = "padding:4px 0 7px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:3px;";
     scroll.prepend(section);
   }
-
+  section.dataset.signature = signature;
   section.innerHTML = "";
 
   const title = document.createElement("div");
@@ -184,7 +189,6 @@ function buildFavoritesSection(popup: HTMLElement) {
 
   favoriteRows.forEach(row => {
     const originalButton = row.querySelector<HTMLButtonElement>(":scope > button");
-    const originalStar = row.querySelector<HTMLButtonElement>(":scope > button:nth-last-child(1)");
     if (!originalButton) return;
 
     const clone = row.cloneNode(true) as HTMLElement;
@@ -200,20 +204,7 @@ function buildFavoritesSection(popup: HTMLElement) {
       e.stopPropagation();
       originalButton.click();
     });
-    clone.addEventListener("pointerdown", e => {
-      e.stopPropagation();
-    });
     section!.appendChild(clone);
-
-    const cloneButton = clone.querySelector<HTMLButtonElement>(":scope > button");
-    if (cloneButton) installLongPress(clone);
-    const cloneStar = clone.querySelector<HTMLButtonElement>(":scope > button:nth-last-child(1)");
-    cloneStar?.addEventListener("click", e => {
-      e.preventDefault();
-      e.stopPropagation();
-      originalStar?.click();
-      window.setTimeout(refreshFavorites, 30);
-    });
   });
 }
 
