@@ -1,5 +1,5 @@
 /**
- * candles.ts — authoritative historical OHLC + live current-candle merge.
+ * Authoritative historical OHLC + live current-candle merge.
  * Crypto perpetuals use Bybit for both historical and live market data.
  */
 import { Router, type IRouter } from "express";
@@ -30,13 +30,30 @@ function bybitInterval(interval: string): string | null {
   return null;
 }
 
-async function fetchBybitCandles(symbol: string, interval: string, limit = 500, beforeSec?: number): Promise<OHLCBar[]> {
+function hasContinuityGaps(bars: OHLCBar[], interval: string): boolean {
+  const mins = Number(interval);
+  if (!Number.isFinite(mins) || mins <= 0 || bars.length < 3) return false;
+  const step = mins * 60;
+  for (let i = 1; i < bars.length; i++) {
+    if (bars[i].time - bars[i - 1].time > step * 1.5) return true;
+  }
+  return false;
+}
+
+async function fetchBybitCandlesOnce(symbol: string, interval: string, limit = 500, beforeSec?: number): Promise<OHLCBar[]> {
   const iv = bybitInterval(interval);
   if (!iv) return [];
-  const params = new URLSearchParams({ category: "linear", symbol: normalizeBybitSymbol(symbol), interval: iv, limit: String(Math.min(limit, 1000)) });
+  const params = new URLSearchParams({
+    category: "linear",
+    symbol: normalizeBybitSymbol(symbol),
+    interval: iv,
+    limit: String(Math.min(limit, 1000)),
+  });
   if (beforeSec && beforeSec > 0) params.set("end", String(Math.floor(beforeSec * 1000) - 1));
 
-  const response = await fetch(`https://api.bybit.com/v5/market/kline?${params.toString()}`, { headers: { accept: "application/json" } });
+  const response = await fetch(`https://api.bybit.com/v5/market/kline?${params.toString()}`, {
+    headers: { accept: "application/json" },
+  });
   if (!response.ok) throw new Error(`Bybit kline HTTP ${response.status}`);
   const json = await response.json() as { retCode?: number; retMsg?: string; result?: { list?: string[][] } };
   if (json.retCode !== 0) throw new Error(`Bybit kline ${json.retCode}: ${json.retMsg ?? "unknown error"}`);
@@ -52,10 +69,51 @@ async function fetchBybitCandles(symbol: string, interval: string, limit = 500, 
   })).filter(b => Number.isFinite(b.time) && Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low) && Number.isFinite(b.close)).sort((a,b) => a.time - b.time);
 }
 
+/**
+ * Historical requests must not silently degrade to the in-memory live aggregator.
+ * If the browser was away from the chart for a few minutes, that fallback would
+ * contain the old last candle and the next live candle, creating a visible gap.
+ * Retry transient Bybit failures and reject incomplete crypto history instead.
+ */
+async function fetchBybitCandles(symbol: string, interval: string, limit = 500, beforeSec?: number): Promise<OHLCBar[]> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const bars = await fetchBybitCandlesOnce(symbol, interval, limit, beforeSec);
+      const expected = Math.min(limit, 1000);
+      if (bars.length > 0 && bars.length < Math.min(expected, 10)) {
+        throw new Error(`Bybit returned only ${bars.length} historical bars`);
+      }
+      if (!beforeSec && bars.length >= 3 && hasContinuityGaps(bars, interval)) {
+        throw new Error(`Bybit returned discontinuous ${interval}m history`);
+      }
+      return bars;
+    } catch (err) {
+      lastError = err;
+      logger.warn({ symbol, interval, beforeSec, attempt, err: String(err) }, "candles: Bybit historical fetch retry");
+      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "Bybit historical fetch failed"));
+}
+
 function mergeBars(historical: OHLCBar[], aggregated: OHLCBar[]): OHLCBar[] {
-  const history = historical.slice(-500); const live = aggregated.at(-1); if (!live) return history; if (!history.length) return [live];
-  const last = history.at(-1)!; if (live.time < last.time) return history;
-  if (live.time === last.time) return [...history.slice(0,-1), { time:last.time, open:last.open, high:Math.max(last.high,live.high,last.open,live.close), low:Math.min(last.low,live.low,last.open,live.close), close:live.close, volume:Math.max(last.volume,live.volume) }];
+  const history = historical.slice(-500);
+  const live = aggregated.at(-1);
+  if (!live) return history;
+  if (!history.length) return [live];
+  const last = history.at(-1)!;
+  if (live.time < last.time) return history;
+  if (live.time === last.time) {
+    return [...history.slice(0,-1), {
+      time:last.time,
+      open:last.open,
+      high:Math.max(last.high,live.high,last.open,live.close),
+      low:Math.min(last.low,live.low,last.open,live.close),
+      close:live.close,
+      volume:Math.max(last.volume,live.volume),
+    }];
+  }
   return [...history, live].slice(-501);
 }
 
@@ -68,7 +126,8 @@ const SYMBOL_RELOAD_COOLDOWN = 30_000;
 
 async function lookupSymbolId(symbol: string): Promise<{ symbolId: number; symbolName: string } | null> {
   const row = await pool.query<{ symbol_id: number; symbol_name: string }>("SELECT symbol_id, symbol_name FROM ctrader_symbols WHERE UPPER(symbol_name) = UPPER($1) LIMIT 1", [symbol]);
-  if (!row.rows.length) return null; return { symbolId:Number(row.rows[0].symbol_id), symbolName:row.rows[0].symbol_name };
+  if (!row.rows.length) return null;
+  return { symbolId:Number(row.rows[0].symbol_id), symbolName:row.rows[0].symbol_name };
 }
 
 async function saveSymbolsToDB(symbols: Array<{symbolId:number;symbolName:string;description:string;pipPosition:number;digits:number}>): Promise<void> {
@@ -77,36 +136,48 @@ async function saveSymbolsToDB(symbols: Array<{symbolId:number;symbolName:string
 }
 
 async function autoLoadSymbols(targetSymbol: string): Promise<{symbolId:number;symbolName:string}|null> {
-  const now=Date.now(); if(!symbolLoadPromise&&now-symbolLoadedAt<SYMBOL_RELOAD_COOLDOWN)return lookupSymbolId(targetSymbol);
-  const creds=ctraderTickEngine.getEngineCredentials(); if(!creds){logger.warn({targetSymbol},"candles: symbol auto-load skipped — engine has no credentials");return null;}
+  const now=Date.now();
+  if(!symbolLoadPromise&&now-symbolLoadedAt<SYMBOL_RELOAD_COOLDOWN)return lookupSymbolId(targetSymbol);
+  const creds=ctraderTickEngine.getEngineCredentials();
+  if(!creds){logger.warn({targetSymbol},"candles: symbol auto-load skipped — engine has no credentials");return null;}
   if(!symbolLoadPromise){symbolLoadPromise=(async()=>{try{const symbols=await fetchSymbolsViaProtoOA({ctidTraderAccountId:creds.ctidTraderAccountId,isLive:creds.isLive,accessToken:creds.accessToken,clientId:creds.clientId,clientSecret:creds.clientSecret,timeoutMs:30000});await saveSymbolsToDB(symbols);symbolLoadedAt=Date.now();}catch(err){logger.error({targetSymbol,err:String(err)},"candles: symbol auto-load FAILED");}finally{symbolLoadPromise=null;}})();}
-  await symbolLoadPromise.catch(()=>{}); return lookupSymbolId(targetSymbol);
+  await symbolLoadPromise.catch(()=>{});
+  return lookupSymbolId(targetSymbol);
 }
 
 export function createCandlesRouter(aggregator: CandleAggregator, _marketData: MarketDataService): IRouter {
   const router: IRouter = Router();
 
   router.get("/candles/ctrader/diagnostic/:symbol/:interval", async (req,res):Promise<void>=>{
-    const symbol=(req.params["symbol"]??"").toUpperCase().trim(); const interval=req.params["interval"]??""; const engineStatus=ctraderTickEngine.getStatus(); const engineCreds=ctraderTickEngine.getEngineCredentials(); const symRow=await lookupSymbolId(symbol).catch(()=>null); const aggBars=aggregator.getBars(symbol,interval as CandleInterval);
+    const symbol=(req.params["symbol"]??"").toUpperCase().trim();
+    const interval=req.params["interval"]??"";
+    const engineStatus=ctraderTickEngine.getStatus();
+    const engineCreds=ctraderTickEngine.getEngineCredentials();
+    const symRow=await lookupSymbolId(symbol).catch(()=>null);
+    const aggBars=aggregator.getBars(symbol,interval as CandleInterval);
     const diag:Record<string,unknown>={symbol,interval,timeframeLabel:INTERVAL_LABEL[interval]??interval,isCtraderSymbol:CTRADER_SYMBOLS.has(symbol),isBybitCrypto:isBybitCryptoSymbol(symbol),engineStatus:engineStatus.status,engineAccountId:engineStatus.accountId,engineIsLive:engineStatus.isLive,engineSubscribedSymbols:engineStatus.subscribedSymbols,engineHasCreds:!!engineCreds,symbolId:symRow?.symbolId??null,symbolIdFound:!!symRow,aggregatorBars:aggBars.length,cacheKey:`${symbol}:${interval}`,cached:trendbarsCache.has(`${symbol}:${interval}`)};
     if(isBybitCryptoSymbol(symbol)){try{const t0=Date.now();const bars=await fetchBybitCandles(symbol,interval,5);diag["testFetch"]={ok:true,provider:"bybit",bars:bars.length,durationMs:Date.now()-t0};}catch(e){diag["testFetch"]={ok:false,provider:"bybit",error:String(e)};}}
     res.json(diag);
   });
 
   router.get("/candles/:symbol/:interval", async(req,res):Promise<void>=>{
-    const symbol=(req.params["symbol"]??"").toUpperCase().trim(); const interval=req.params["interval"]??"";
+    const symbol=(req.params["symbol"]??"").toUpperCase().trim();
+    const interval=req.params["interval"]??"";
     if(!symbol||!VALID_INTERVALS.has(interval)){res.status(400).json({error:"Invalid symbol or interval"});return;}
-    const beforeRaw=req.query["before"]; const beforeSec=typeof beforeRaw==="string"?parseInt(beforeRaw,10):NaN; const beforeSecOpt=(!isNaN(beforeSec)&&beforeSec>0)?beforeSec:undefined; const iv=interval as CandleInterval;
+    const beforeRaw=req.query["before"];
+    const beforeSec=typeof beforeRaw==="string"?parseInt(beforeRaw,10):NaN;
+    const beforeSecOpt=(!isNaN(beforeSec)&&beforeSec>0)?beforeSec:undefined;
+    const iv=interval as CandleInterval;
 
     if(isBybitCryptoSymbol(symbol)){
       try{
         const bars=await fetchBybitCandles(symbol,interval,500,beforeSecOpt);
         const aggBars=aggregator.getBars(symbol,iv);
-        if(!bars.length){res.json(aggBars.slice(-501));return;}
+        if(!bars.length){res.status(503).json({error:"Historical Bybit candles unavailable"});return;}
         res.json(mergeBars(bars,aggBars));
       }catch(err){
-        logger.error({symbol,interval,beforeSecOpt,err:String(err)},"candles: Bybit historical OHLC failed");
-        const aggBars=aggregator.getBars(symbol,iv); res.json(aggBars.slice(-501));
+        logger.error({symbol,interval,beforeSecOpt,err:String(err)},"candles: Bybit historical OHLC failed after retries");
+        res.status(503).json({error:"Historical candle feed temporarily unavailable"});
       }
       return;
     }
@@ -121,7 +192,10 @@ export function createCandlesRouter(aggregator: CandleAggregator, _marketData: M
     }
 
     if(beforeSecOpt){res.json(await fetchDeltaCandles(symbol,interval,500,beforeSecOpt));return;}
-    const historicalBars=await fetchDeltaCandles(symbol,interval,500);const aggBars=aggregator.getBars(symbol,iv);if(!historicalBars.length){res.json(aggBars.slice(-501));return;}res.json(mergeBars(historicalBars,aggBars));
+    const historicalBars=await fetchDeltaCandles(symbol,interval,500);
+    const aggBars=aggregator.getBars(symbol,iv);
+    if(!historicalBars.length){res.json(aggBars.slice(-501));return;}
+    res.json(mergeBars(historicalBars,aggBars));
   });
   return router;
 }
