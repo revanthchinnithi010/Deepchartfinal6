@@ -43,21 +43,12 @@ function hasContinuityGaps(bars: OHLCBar[], interval: string): boolean {
 async function fetchBybitCandlesOnce(symbol: string, interval: string, limit = 500, beforeSec?: number): Promise<OHLCBar[]> {
   const iv = bybitInterval(interval);
   if (!iv) return [];
-  const params = new URLSearchParams({
-    category: "linear",
-    symbol: normalizeBybitSymbol(symbol),
-    interval: iv,
-    limit: String(Math.min(limit, 1000)),
-  });
+  const params = new URLSearchParams({ category: "linear", symbol: normalizeBybitSymbol(symbol), interval: iv, limit: String(Math.min(limit, 1000)) });
   if (beforeSec && beforeSec > 0) params.set("end", String(Math.floor(beforeSec * 1000) - 1));
-
-  const response = await fetch(`https://api.bybit.com/v5/market/kline?${params.toString()}`, {
-    headers: { accept: "application/json" },
-  });
+  const response = await fetch(`https://api.bybit.com/v5/market/kline?${params.toString()}`, { headers: { accept: "application/json" } });
   if (!response.ok) throw new Error(`Bybit kline HTTP ${response.status}`);
   const json = await response.json() as { retCode?: number; retMsg?: string; result?: { list?: string[][] } };
   if (json.retCode !== 0) throw new Error(`Bybit kline ${json.retCode}: ${json.retMsg ?? "unknown error"}`);
-
   const rows = json.result?.list ?? [];
   return rows.map(row => ({
     time: Math.floor(Number(row[0]) / 1000),
@@ -69,24 +60,14 @@ async function fetchBybitCandlesOnce(symbol: string, interval: string, limit = 5
   })).filter(b => Number.isFinite(b.time) && Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low) && Number.isFinite(b.close)).sort((a,b) => a.time - b.time);
 }
 
-/**
- * Historical requests must not silently degrade to the in-memory live aggregator.
- * If the browser was away from the chart for a few minutes, that fallback would
- * contain the old last candle and the next live candle, creating a visible gap.
- * Retry transient Bybit failures and reject incomplete crypto history instead.
- */
 async function fetchBybitCandles(symbol: string, interval: string, limit = 500, beforeSec?: number): Promise<OHLCBar[]> {
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const bars = await fetchBybitCandlesOnce(symbol, interval, limit, beforeSec);
       const expected = Math.min(limit, 1000);
-      if (bars.length > 0 && bars.length < Math.min(expected, 10)) {
-        throw new Error(`Bybit returned only ${bars.length} historical bars`);
-      }
-      if (!beforeSec && bars.length >= 3 && hasContinuityGaps(bars, interval)) {
-        throw new Error(`Bybit returned discontinuous ${interval}m history`);
-      }
+      if (bars.length > 0 && bars.length < Math.min(expected, 10)) throw new Error(`Bybit returned only ${bars.length} historical bars`);
+      if (!beforeSec && bars.length >= 3 && hasContinuityGaps(bars, interval)) throw new Error(`Bybit returned discontinuous ${interval}m history`);
       return bars;
     } catch (err) {
       lastError = err;
@@ -104,16 +85,7 @@ function mergeBars(historical: OHLCBar[], aggregated: OHLCBar[]): OHLCBar[] {
   if (!history.length) return [live];
   const last = history.at(-1)!;
   if (live.time < last.time) return history;
-  if (live.time === last.time) {
-    return [...history.slice(0,-1), {
-      time:last.time,
-      open:last.open,
-      high:Math.max(last.high,live.high,last.open,live.close),
-      low:Math.min(last.low,live.low,last.open,live.close),
-      close:live.close,
-      volume:Math.max(last.volume,live.volume),
-    }];
-  }
+  if (live.time === last.time) return [...history.slice(0,-1), { time:last.time, open:last.open, high:Math.max(last.high,live.high,last.open,live.close), low:Math.min(last.low,live.low,last.open,live.close), close:live.close, volume:Math.max(last.volume,live.volume) }];
   return [...history, live].slice(-501);
 }
 
@@ -172,9 +144,14 @@ export function createCandlesRouter(aggregator: CandleAggregator, _marketData: M
     if(isBybitCryptoSymbol(symbol)){
       try{
         const bars=await fetchBybitCandles(symbol,interval,500,beforeSecOpt);
-        const aggBars=aggregator.getBars(symbol,iv);
         if(!bars.length){res.status(503).json({error:"Historical Bybit candles unavailable"});return;}
-        res.json(mergeBars(bars,aggBars));
+        // CRYPTO HISTORY IS AUTHORITATIVE: never merge the server's in-memory
+        // aggregator into Bybit history. After the browser is closed, that
+        // aggregator may contain an old/stale partial candle and can corrupt
+        // the first few candles when the chart is opened again. The frontend
+        // seeds its own live aggregator from the final Bybit candle and then
+        // applies live WS ticks on top of it.
+        res.json(bars);
       }catch(err){
         logger.error({symbol,interval,beforeSecOpt,err:String(err)},"candles: Bybit historical OHLC failed after retries");
         res.status(503).json({error:"Historical candle feed temporarily unavailable"});
