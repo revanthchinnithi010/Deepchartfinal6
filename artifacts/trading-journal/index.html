@@ -2,7 +2,7 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <title>TradeVault</title>
     <meta name="description" content="TradeVault — Premium Trading Journal. Track trades, analyze performance, and grow as a trader." />
     <meta name="robots" content="index, follow" />
@@ -30,8 +30,12 @@
         try {
           var t = localStorage.getItem('tj-theme');
           var html = document.documentElement;
-          if (t === 'light') { html.classList.remove('dark'); html.classList.add('light'); }
+          var light = t === 'light';
+          if (light) { html.classList.remove('dark'); html.classList.add('light'); }
           else { html.classList.add('dark'); html.classList.remove('light'); }
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', light ? '#f8fafc' : '#000000');
+          document.documentElement.style.colorScheme = light ? 'light' : 'dark';
         } catch(e) {}
       })();
     </script>
