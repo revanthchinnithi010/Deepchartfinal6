@@ -108,3 +108,48 @@ html.light .lucide-bell,html.light .lucide-bell-ring{color:#475569!important;str
     -webkit-backdrop-filter: none !important;
   }
 }
+
+/* FINAL: make the entire fixed light-mode footer area opaque.
+   The visible defect is a dark compositor halo ABOVE the pill, not a shadow
+   declared on the pill itself. A fully opaque footer plane prevents any
+   underlying page/compositor layer from bleeding through that area. */
+@media (max-width:768px){
+  html.light div:has(> .tj-mobile-nav-shell) {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    height: calc(90px + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: 90px !important;
+    box-sizing: border-box !important;
+    padding: 2px 14px 10px !important;
+    background: #f8fafc !important;
+    background-image: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    filter: none !important;
+    -webkit-filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    mix-blend-mode: normal !important;
+    opacity: 1 !important;
+    isolation: isolate !important;
+    contain: strict !important;
+    clip-path: inset(0) !important;
+    -webkit-clip-path: inset(0) !important;
+    transform: none !important;
+    will-change: auto !important;
+  }
+
+  html.light div:has(> .tj-mobile-nav-shell) .tj-mobile-nav-shell {
+    width: 100% !important;
+    min-height: 76px !important;
+    background: #f8fafc !important;
+    box-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
