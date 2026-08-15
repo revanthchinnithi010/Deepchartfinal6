@@ -63,7 +63,9 @@ export function MobileBottomNav() {
         backdropFilter: "none",
         WebkitBackdropFilter: "none",
         isolation: "isolate",
-        overflow: "hidden",
+        contain: "paint",
+        transform: "translateZ(0)",
+        overflow: "visible",
       }}
     >
       <div
@@ -84,6 +86,7 @@ export function MobileBottomNav() {
           WebkitFilter: "none",
           backdropFilter: "none",
           WebkitBackdropFilter: "none",
+          isolation: "isolate",
         }}
       >
         {TABS.map((tab, idx) => {
