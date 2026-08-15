@@ -44,30 +44,38 @@ export function MobileBottomNav() {
     if (!host) return;
 
     const background = isLight ? "#f8fafc" : "#05070a";
-    host.style.position = "fixed";
-    host.style.left = "0";
-    host.style.right = "0";
-    host.style.bottom = "0";
-    host.style.width = "100%";
-    host.style.height = `calc(${NAV_H}px + ${SAFE_BOTTOM})`;
-    host.style.boxSizing = "border-box";
-    host.style.padding = `0 0 ${SAFE_BOTTOM}`;
-    host.style.background = background;
-    host.style.backgroundImage = "none";
-    host.style.border = "0";
-    host.style.borderRadius = "0";
-    host.style.boxShadow = "none";
-    host.style.filter = "none";
-    host.style.webkitFilter = "none";
-    host.style.backdropFilter = "none";
-    host.style.webkitBackdropFilter = "none";
-    host.style.mixBlendMode = "normal";
-    host.style.opacity = "1";
-    host.style.isolation = "isolate";
-    host.style.overflow = "hidden";
-    host.style.transform = "none";
-    host.style.contain = "paint";
-    host.style.zIndex = "45";
+    const important = (property: string, value: string) => host.style.setProperty(property, value, "important");
+
+    /*
+     * This is deliberately applied to Layout's OUTER fixed host, not the pill.
+     * index.css contains legacy light-mode :has(...) rules with !important;
+     * normal inline styles cannot beat those declarations. The host therefore
+     * has to be explicitly owned at the same cascade level as those rules.
+     */
+    important("position", "fixed");
+    important("left", "0");
+    important("right", "0");
+    important("bottom", "0");
+    important("width", "100%");
+    important("height", `calc(${NAV_H}px + ${SAFE_BOTTOM})`);
+    important("box-sizing", "border-box");
+    important("padding", `0 0 ${SAFE_BOTTOM}`);
+    important("background", background);
+    important("background-image", "none");
+    important("border", "0");
+    important("border-radius", "0");
+    important("box-shadow", "none");
+    important("filter", "none");
+    important("-webkit-filter", "none");
+    important("backdrop-filter", "none");
+    important("-webkit-backdrop-filter", "none");
+    important("mix-blend-mode", "normal");
+    important("opacity", "1");
+    important("isolation", "isolate");
+    important("overflow", "hidden");
+    important("transform", "none");
+    important("contain", "paint");
+    important("z-index", "45");
   }, [isLight]);
 
   const shellBg = isLight ? "#f8fafc" : "#05070a";
@@ -130,7 +138,6 @@ export function MobileBottomNav() {
           const active = idx === visualIdx;
           const isAlerts = tab.kind === "link" && tab.href === "/alerts";
           const badge = isAlerts && unreadCount > 0 ? unreadCount : 0;
-
           return (
             <Link
               key={tab.kind === "link" ? tab.href : `action-${idx}`}
