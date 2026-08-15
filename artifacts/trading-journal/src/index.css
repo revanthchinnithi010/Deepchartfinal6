@@ -15,7 +15,7 @@
 .alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]) > button:hover { background:rgba(255,255,255,.055)!important; border-color:rgba(255,255,255,.18)!important; color:#fff!important; transform:translateY(-1px); }
 .alert-modal-sheet div.flex.gap-2:has(> button[class*="capitalize"]) > button[class*="bg-primary"],
 .alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]) > button[class*="bg-primary"] { background:rgba(255,255,255,.95)!important; border-color:rgba(255,255,255,.95)!important; color:#111!important; box-shadow:0 6px 20px rgba(255,255,255,.10),inset 0 1px 0 rgba(255,255,255,.8); }
-@media (max-width:380px){.alert-modal-sheet div.flex.gap-2:has(> button[class*="capitalize"]),.alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]){grid-template-columns:repeat(2,minmax(0,1fr))!important;}}
+@media (max-width:380px){.alert-modal-sheet div.flex.gap-2:has(> button[class*="capitalize"]),.alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]){grid-template-columns:repeat(2,minmax(0,1fr));}}
 
 /* Mobile chart tools */
 @media (max-width:768px){
@@ -39,7 +39,6 @@ html.light .tj-cnav-entrance > div:first-child > div,
 html.light .tj-cnav-entrance > div:first-child > div::before,
 html.light .tj-cnav-entrance > div:first-child > div::after { background:#fff!important; background-image:none!important; border:none!important; backdrop-filter:none!important; -webkit-backdrop-filter:none!important; box-shadow:none!important; filter:none!important; opacity:1!important; }
 html.light .tj-cnav-entrance .tj-cnav-tab svg{filter:none!important;}
-/* Fallback for implementations where the navigation class is generated/renamed. */
 html.light [class*="cnav"],html.light [class*="bottom-nav"],html.light [class*="bottomNav"] { filter:none!important; box-shadow:none!important; background-image:none!important; mix-blend-mode:normal!important; }
 html.dark .tj-cnav-entrance > div:first-child{background:#0d0d0d!important;box-shadow:0 4px 18px rgba(0,0,0,.35)!important;}
 html.dark .tj-cnav-entrance > div:first-child > div{background:#0d0d0d!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.055),inset 0 -1px 0 rgba(0,0,0,.65)!important;}
@@ -53,3 +52,59 @@ html.light header button[aria-label="Notifications"]{color:#334155!important;bac
 html.light header button[aria-label="Notifications"]:hover,html.light header button[aria-label="Notifications"]:focus-visible{background:#f1f5f9!important;}
 html.light header button[aria-label="Notifications"] svg,html.light header button[aria-label^="Switch to"] svg{color:#334155!important;stroke:#334155!important;}
 html.light .lucide-bell,html.light .lucide-bell-ring{color:#475569!important;stroke:#475569!important;}
+
+/* HARD LIGHT-MODE FIX: the bottom nav is mounted inside a fixed wrapper in Layout.
+   The wrapper itself had no semantic class, so older glass/compositing rules could
+   still produce a dark halo around the white pill after the first paint.  Isolate
+   the whole fixed layer and make every possible visual effect explicit. */
+@media (max-width:768px){
+  html.light div:has(> .tj-mobile-nav-shell),
+  html.light div:has(> .tj-mobile-nav-shell) * {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  html.light div:has(> .tj-mobile-nav-shell) {
+    background: #f8fafc !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    filter: none !important;
+    -webkit-filter: none !important;
+    mix-blend-mode: normal !important;
+    opacity: 1 !important;
+    isolation: isolate !important;
+    contain: paint !important;
+    transform: translateZ(0) !important;
+    will-change: auto !important;
+  }
+
+  html.light .tj-mobile-nav-shell {
+    background: #f8fafc !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    filter: none !important;
+    -webkit-filter: none !important;
+    mix-blend-mode: normal !important;
+    opacity: 1 !important;
+    isolation: isolate !important;
+    contain: paint !important;
+    transform: translateZ(0) !important;
+  }
+
+  html.light .tj-mobile-nav-pill,
+  html.light .tj-mobile-nav-pill::before,
+  html.light .tj-mobile-nav-pill::after {
+    background: #fff !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    -webkit-box-shadow: none !important;
+    filter: none !important;
+    -webkit-filter: none !important;
+    mix-blend-mode: normal !important;
+    opacity: 1 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
