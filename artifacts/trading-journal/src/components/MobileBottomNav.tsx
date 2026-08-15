@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { TAP_TRANSITION, tweenFast } from "@/animations/motion";
@@ -31,6 +31,7 @@ export function MobileBottomNav() {
   const dashboardSheetOpen = useChartStore(s => s.dashboardSheetOpen);
   const { theme } = useTheme();
   const isLight = theme === "light";
+  const hostRef = useRef<HTMLDivElement>(null);
 
   const hidden = mobileChartFullscreen || dashboardSheetOpen;
   const activeIdx = TABS.findIndex(t => t.kind === "link" && t.href === location);
@@ -40,31 +41,62 @@ export function MobileBottomNav() {
     if (activeIdx >= 0 && !mobileChartFullscreen) setVisualIdx(activeIdx);
   }, [activeIdx, mobileChartFullscreen]);
 
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const setImportant = (property: string, value: string) => host.style.setProperty(property, value, "important");
+
+    // The legacy :has(.tj-mobile-nav-shell) rules are !important. The portal
+    // deliberately lives under document.body, so Dashboard can no longer be an
+    // ancestor. Inline-important values here also prevent those old rules from
+    // changing the portal host when Dashboard finishes mounting.
+    setImportant("position", "fixed");
+    setImportant("left", "0");
+    setImportant("right", "0");
+    setImportant("bottom", "0");
+    setImportant("width", "100%");
+    setImportant("height", `calc(${NAV_H}px + ${SAFE_BOTTOM})`);
+    setImportant("box-sizing", "border-box");
+    setImportant("padding", `0 0 ${SAFE_BOTTOM}`);
+    setImportant("background", isLight ? "#f8fafc" : "#05070a");
+    setImportant("background-image", "none");
+    setImportant("border", "0");
+    setImportant("border-radius", "0");
+    setImportant("box-shadow", "none");
+    setImportant("-webkit-box-shadow", "none");
+    setImportant("filter", "none");
+    setImportant("-webkit-filter", "none");
+    setImportant("backdrop-filter", "none");
+    setImportant("-webkit-backdrop-filter", "none");
+    setImportant("mix-blend-mode", "normal");
+    setImportant("opacity", hidden ? "0" : "1");
+    setImportant("visibility", hidden ? "hidden" : "visible");
+    setImportant("pointer-events", hidden ? "none" : "auto");
+    setImportant("isolation", "isolate");
+    setImportant("contain", "paint");
+    setImportant("clip-path", "none");
+    setImportant("-webkit-clip-path", "none");
+    setImportant("transform", "translateZ(0)");
+    setImportant("will-change", "auto");
+    setImportant("z-index", "45");
+    setImportant("overflow", "hidden");
+  }, [isLight, hidden]);
+
   if (typeof document === "undefined") return null;
 
   const shellBg = isLight ? "#f8fafc" : "#05070a";
   const pillBg = isLight ? "#ffffff" : "rgba(5,5,8,0.82)";
   const pillBorder = isLight ? "1px solid #e2e8f0" : "none";
-  const pillShadow = isLight
-    ? "none"
-    : "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(0,0,0,0.40)";
+  const pillShadow = isLight ? "none" : "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(0,0,0,0.40)";
   const activeIconColor = isLight ? "#111827" : "#ffffff";
   const inactiveIconColor = isLight ? "#64748b" : "rgba(148,163,184,0.44)";
   const activeLabelColor = isLight ? "#111827" : "rgba(255,255,255,0.92)";
   const inactiveLabelColor = isLight ? "#64748b" : "rgba(148,163,184,0.40)";
   const badgeBorder = isLight ? "#ffffff" : "rgba(5,5,8,0.9)";
 
-  /*
-   * ROOT-CAUSE FIX:
-   * This portal is mounted directly under document.body. Dashboard is a
-   * keep-alive compositor tree and its PageTransition / GPU layers must never
-   * become ancestors of the bottom navigation. The previous Layout fixed host
-   * put the nav in the same DOM/compositing tree; after Dashboard finished
-   * mounting, that tree could expose a dark compositor surface around the pill.
-   * A body-level portal makes the nav an independent top-level layer.
-   */
   return createPortal(
     <div
+      ref={hostRef}
       className="tj-mobile-nav-host"
       data-theme={isLight ? "light" : "dark"}
       aria-hidden={hidden}
@@ -92,81 +124,27 @@ export function MobileBottomNav() {
         pointerEvents: hidden ? "none" : "auto",
         isolation: "isolate",
         contain: "paint",
+        clipPath: "none",
         transform: "translateZ(0)",
         willChange: "auto",
         zIndex: 45,
         overflow: "hidden",
       }}
     >
-      <div
-        className="tj-mobile-nav-shell"
-        style={{
-          width: "100%",
-          height: NAV_H,
-          minHeight: NAV_H,
-          boxSizing: "border-box",
-          padding: "2px 14px 10px",
-          background: shellBg,
-          position: "relative",
-          boxShadow: "none",
-          filter: "none",
-          WebkitFilter: "none",
-          backdropFilter: "none",
-          WebkitBackdropFilter: "none",
-          isolation: "isolate",
-          contain: "none",
-          transform: "none",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          className="tj-mobile-nav-pill"
-          style={{
-            height: BAR_H,
-            borderRadius: 9999,
-            padding: 0,
-            width: "100%",
-            background: pillBg,
-            border: pillBorder,
-            boxShadow: pillShadow,
-            position: "relative",
-            overflow: "hidden",
-            display: "flex",
-            boxSizing: "border-box",
-            filter: "none",
-            WebkitFilter: "none",
-            backdropFilter: "none",
-            WebkitBackdropFilter: "none",
-            isolation: "isolate",
-          }}
-        >
+      <div className="tj-mobile-nav-shell" style={{ width: "100%", height: NAV_H, minHeight: NAV_H, boxSizing: "border-box", padding: "2px 14px 10px", background: shellBg, position: "relative", boxShadow: "none", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "isolate", contain: "none", transform: "none", overflow: "hidden" }}>
+        <div className="tj-mobile-nav-pill" style={{ height: BAR_H, borderRadius: 9999, padding: 0, width: "100%", background: pillBg, border: pillBorder, boxShadow: pillShadow, position: "relative", overflow: "hidden", display: "flex", boxSizing: "border-box", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "isolate" }}>
           {TABS.map((tab, idx) => {
             const active = idx === visualIdx;
             const isAlerts = tab.kind === "link" && tab.href === "/alerts";
             const badge = isAlerts && unreadCount > 0 ? unreadCount : 0;
             return (
-              <Link
-                key={tab.kind === "link" ? tab.href : `action-${idx}`}
-                href={tab.kind === "link" ? tab.href : "/"}
-                style={{ flex: 1, display: "flex", textDecoration: "none", WebkitTapHighlightColor: "transparent", outline: "none", position: "relative", zIndex: 10 } as React.CSSProperties}
-              >
-                <motion.div
-                  className="tj-mobile-nav-tab"
-                  whileTap={{ scale: 0.97 }}
-                  transition={TAP_TRANSITION}
-                  style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", userSelect: "none", filter: "none", WebkitFilter: "none" }}
-                >
+              <Link key={tab.kind === "link" ? tab.href : `action-${idx}`} href={tab.kind === "link" ? tab.href : "/"} style={{ flex: 1, display: "flex", textDecoration: "none", WebkitTapHighlightColor: "transparent", outline: "none", position: "relative", zIndex: 10 } as React.CSSProperties}>
+                <motion.div className="tj-mobile-nav-tab" whileTap={{ scale: 0.97 }} transition={TAP_TRANSITION} style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", userSelect: "none", filter: "none", WebkitFilter: "none" }}>
                   <motion.div animate={{ scale: active ? 1.12 : 1 }} transition={tweenFast} style={{ position: "relative", filter: "none", WebkitFilter: "none" }}>
                     <tab.Icon style={{ width: 22, height: 22, flexShrink: 0, color: active ? activeIconColor : inactiveIconColor, transition: "color 0.22s ease", display: "block", filter: "none" }} />
-                    {badge > 0 && (
-                      <span style={{ position: "absolute", top: -5, right: -6, minWidth: 14, height: 14, borderRadius: 9999, background: "#ef4444", boxShadow: "0 0 6px rgba(239,68,68,0.55)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff", lineHeight: 1, padding: "0 3px", border: `1.5px solid ${badgeBorder}`, pointerEvents: "none" }}>
-                        {badge > 99 ? "99+" : badge}
-                      </span>
-                    )}
+                    {badge > 0 && <span style={{ position: "absolute", top: -5, right: -6, minWidth: 14, height: 14, borderRadius: 9999, background: "#ef4444", boxShadow: "0 0 6px rgba(239,68,68,0.55)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff", lineHeight: 1, padding: "0 3px", border: `1.5px solid ${badgeBorder}`, pointerEvents: "none" }}>{badge > 99 ? "99+" : badge}</span>}
                   </motion.div>
-                  <span style={{ fontSize: 10, lineHeight: 1, fontWeight: active ? 600 : 400, color: active ? activeLabelColor : inactiveLabelColor, letterSpacing: active ? "0.04em" : "0.01em", transition: "color 0.22s ease", whiteSpace: "nowrap" }}>
-                    {tab.label}
-                  </span>
+                  <span style={{ fontSize: 10, lineHeight: 1, fontWeight: active ? 600 : 400, color: active ? activeLabelColor : inactiveLabelColor, letterSpacing: active ? "0.04em" : "0.01em", transition: "color 0.22s ease", whiteSpace: "nowrap" }}>{tab.label}</span>
                 </motion.div>
               </Link>
             );
