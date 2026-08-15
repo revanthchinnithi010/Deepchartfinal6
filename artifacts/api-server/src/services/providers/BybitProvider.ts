@@ -63,7 +63,16 @@ export class BybitProvider extends BaseProvider {
   }
 
   connect(): void {
-    if (this.destroyed || this.ws?.readyState === WebSocket.OPEN) return;
+    // IMPORTANT: also guard CONNECTING. Previously only OPEN was checked,
+    // so rapid chart/watchlist subscriptions could create many simultaneous
+    // Bybit sockets before the first handshake completed. That caused 1006
+    // closes, duplicate reconnect storms, and the UI showing Feed Offline.
+    if (
+      this.destroyed ||
+      this.ws?.readyState === WebSocket.OPEN ||
+      this.ws?.readyState === WebSocket.CONNECTING
+    ) return;
+
     this.clearReconnectTimer();
     this.clearPing();
     logger.info({ provider: this.name, url: BYBIT_PUBLIC_WS }, "BybitProvider: connecting");
