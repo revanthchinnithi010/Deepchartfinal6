@@ -20,7 +20,6 @@ const TABS: NavTab[] = [
 ];
 
 const BAR_H = 62;
-const LIGHT_FOOTER_H = "calc(76px + env(safe-area-inset-bottom, 0px))";
 
 export function MobileBottomNav() {
   const [location] = useLocation();
@@ -53,23 +52,19 @@ export function MobileBottomNav() {
       style={{
         flexShrink: 0,
         width: "100%",
-        height: isLight ? LIGHT_FOOTER_H : undefined,
-        minHeight: isLight ? 0 : 76,
+        height: 76,
+        minHeight: 76,
         boxSizing: "border-box",
-        padding: `2px 14px calc(10px + env(safe-area-inset-bottom, 0px))`,
+        padding: `2px 14px 10px`,
         background: shellBg,
-        position: isLight ? "fixed" : "relative",
-        left: isLight ? 0 : undefined,
-        right: isLight ? 0 : undefined,
-        bottom: isLight ? 0 : undefined,
-        zIndex: isLight ? 46 : undefined,
+        position: "relative",
         boxShadow: "none",
         filter: "none",
         WebkitFilter: "none",
         backdropFilter: "none",
         WebkitBackdropFilter: "none",
         isolation: "isolate",
-        contain: isLight ? "none" : "paint",
+        contain: "none",
         transform: "none",
         overflow: "hidden",
       }}
