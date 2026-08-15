@@ -2,11 +2,11 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>TradeVault</title>
     <meta name="description" content="TradeVault — Premium Trading Journal. Track trades, analyze performance, and grow as a trader." />
     <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#f8fafc" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -31,11 +31,11 @@
           var t = localStorage.getItem('tj-theme');
           var html = document.documentElement;
           var light = t === 'light';
+          var meta = document.querySelector('meta[name="theme-color"]');
           if (light) { html.classList.remove('dark'); html.classList.add('light'); }
           else { html.classList.add('dark'); html.classList.remove('light'); }
-          var meta = document.querySelector('meta[name="theme-color"]');
           if (meta) meta.setAttribute('content', light ? '#f8fafc' : '#000000');
-          document.documentElement.style.colorScheme = light ? 'light' : 'dark';
+          html.style.colorScheme = light ? 'light' : 'dark';
         } catch(e) {}
       })();
     </script>
