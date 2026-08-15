@@ -28,13 +28,21 @@
     <script>
       (function() {
         try {
-          var t = localStorage.getItem('tj-theme');
           var html = document.documentElement;
-          var light = t === 'light';
+          var mode = localStorage.getItem('tj-theme-mode') || localStorage.getItem('tj-theme');
+          var light;
+          if (mode === 'light' || mode === 'dark') {
+            light = mode === 'light';
+          } else {
+            // No stored preference yet: match the OS/browser preference,
+            // same as ThemeContext's getSystemTheme(), so this guess
+            // never disagrees with what React resolves a moment later.
+            light = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+          }
           var meta = document.querySelector('meta[name="theme-color"]');
           if (light) { html.classList.remove('dark'); html.classList.add('light'); }
           else { html.classList.add('dark'); html.classList.remove('light'); }
-          if (meta) meta.setAttribute('content', light ? '#f8fafc' : '#000000');
+          if (meta) meta.setAttribute('content', light ? '#f8fafc' : '#05070a');
           html.style.colorScheme = light ? 'light' : 'dark';
         } catch(e) {}
       })();
