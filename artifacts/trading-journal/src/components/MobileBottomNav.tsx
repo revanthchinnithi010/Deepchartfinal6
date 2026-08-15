@@ -38,9 +38,7 @@ export function MobileBottomNav() {
   const shellBg = isLight ? "#f8fafc" : "transparent";
   const pillBg = isLight ? "#ffffff" : "rgba(5,5,8,0.82)";
   const pillBorder = isLight ? "1px solid #e2e8f0" : "none";
-  const pillShadow = isLight
-    ? "none"
-    : "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(0,0,0,0.40)";
+  const pillShadow = isLight ? "none" : "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(0,0,0,0.40)";
   const activeIconColor = isLight ? "#111827" : "#ffffff";
   const inactiveIconColor = isLight ? "#64748b" : "rgba(148,163,184,0.44)";
   const activeLabelColor = isLight ? "#111827" : "rgba(255,255,255,0.92)";
@@ -54,13 +52,18 @@ export function MobileBottomNav() {
       style={{
         flexShrink: 0,
         width: "100%",
+        minHeight: 76,
         boxSizing: "border-box",
         padding: `2px 14px calc(10px + env(safe-area-inset-bottom, 0px))`,
         background: shellBg,
         position: "relative",
         boxShadow: "none",
         filter: "none",
+        WebkitFilter: "none",
+        backdropFilter: "none",
+        WebkitBackdropFilter: "none",
         isolation: "isolate",
+        overflow: "hidden",
       }}
     >
       <div
@@ -77,8 +80,10 @@ export function MobileBottomNav() {
           overflow: "hidden",
           display: "flex",
           boxSizing: "border-box",
-          backdropFilter: isLight ? "none" : "blur(28px) saturate(190%)",
-          WebkitBackdropFilter: isLight ? "none" : "blur(28px) saturate(190%)",
+          filter: "none",
+          WebkitFilter: "none",
+          backdropFilter: "none",
+          WebkitBackdropFilter: "none",
         }}
       >
         {TABS.map((tab, idx) => {
@@ -90,85 +95,23 @@ export function MobileBottomNav() {
             <Link
               key={tab.kind === "link" ? tab.href : `action-${idx}`}
               href={tab.kind === "link" ? tab.href : "/"}
-              style={{
-                flex: 1,
-                display: "flex",
-                textDecoration: "none",
-                WebkitTapHighlightColor: "transparent",
-                outline: "none",
-                position: "relative",
-                zIndex: 10,
-              } as React.CSSProperties}
+              style={{ flex: 1, display: "flex", textDecoration: "none", WebkitTapHighlightColor: "transparent", outline: "none", position: "relative", zIndex: 10 } as React.CSSProperties}
             >
               <motion.div
                 className="tj-mobile-nav-tab"
                 whileTap={{ scale: 0.97 }}
                 transition={TAP_TRANSITION}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 4,
-                  cursor: "pointer",
-                  userSelect: "none",
-                }}
+                style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", userSelect: "none", filter: "none", WebkitFilter: "none" }}
               >
-                <motion.div
-                  animate={{ scale: active ? 1.12 : 1 }}
-                  transition={tweenFast}
-                  style={{ position: "relative" }}
-                >
-                  <tab.Icon
-                    style={{
-                      width: 22,
-                      height: 22,
-                      flexShrink: 0,
-                      color: active ? activeIconColor : inactiveIconColor,
-                      transition: "color 0.22s ease",
-                      display: "block",
-                    }}
-                  />
+                <motion.div animate={{ scale: active ? 1.12 : 1 }} transition={tweenFast} style={{ position: "relative", filter: "none", WebkitFilter: "none" }}>
+                  <tab.Icon style={{ width: 22, height: 22, flexShrink: 0, color: active ? activeIconColor : inactiveIconColor, transition: "color 0.22s ease", display: "block", filter: "none" }} />
                   {badge > 0 && (
-                    <span
-                      style={{
-                        position: "absolute",
-                        top: -5,
-                        right: -6,
-                        minWidth: 14,
-                        height: 14,
-                        borderRadius: 9999,
-                        background: "#ef4444",
-                        boxShadow: "0 0 6px rgba(239,68,68,0.55)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 8,
-                        fontWeight: 700,
-                        color: "#fff",
-                        lineHeight: 1,
-                        padding: "0 3px",
-                        border: `1.5px solid ${badgeBorder}`,
-                        pointerEvents: "none",
-                      }}
-                    >
+                    <span style={{ position: "absolute", top: -5, right: -6, minWidth: 14, height: 14, borderRadius: 9999, background: "#ef4444", boxShadow: "0 0 6px rgba(239,68,68,0.55)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff", lineHeight: 1, padding: "0 3px", border: `1.5px solid ${badgeBorder}`, pointerEvents: "none" }}>
                       {badge > 99 ? "99+" : badge}
                     </span>
                   )}
                 </motion.div>
-                <span
-                  style={{
-                    fontSize: 10,
-                    lineHeight: 1,
-                    fontWeight: active ? 600 : 400,
-                    color: active ? activeLabelColor : inactiveLabelColor,
-                    letterSpacing: active ? "0.04em" : "0.01em",
-                    transition: "color 0.22s ease",
-                    whiteSpace: "nowrap",
-                  }}
-                >
+                <span style={{ fontSize: 10, lineHeight: 1, fontWeight: active ? 600 : 400, color: active ? activeLabelColor : inactiveLabelColor, letterSpacing: active ? "0.04em" : "0.01em", transition: "color 0.22s ease", whiteSpace: "nowrap" }}>
                   {tab.label}
                 </span>
               </motion.div>
