@@ -100,8 +100,14 @@
 
 /* ── Mobile bottom navigation ── */
 @media (max-width: 768px) {
-  /* Light mode: completely remove the heavy dark-looking shadow/halo below
-     the navigation. The pill stays clean and flat against the page. */
+  /* Light mode: the navigation itself AND its padded entrance area must be
+     opaque/light. The previous transparent entrance exposed a dark parent
+     background, which looked like a black halo returning after re-render. */
+  html.light .tj-cnav-entrance {
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+
   html.light .tj-cnav-entrance > div:first-child {
     background: #ffffff !important;
     border: 1px solid #e2e8f0 !important;
@@ -133,10 +139,7 @@
   }
 }
 
-/* ── Light-theme mobile header actions ──
-   The currency + notification controls are rendered as one merged dark oval
-   in the shared Layout header. Override the inline dark palette only in light
-   mode so both controls use a professional neutral light surface. */
+/* ── Light-theme mobile header actions ── */
 html.light header div[style*="border-radius: 99px"] {
   background: #ffffff !important;
   border: 1px solid #dbe2ea !important;
@@ -168,7 +171,6 @@ html.light header button[aria-label^="Switch to"] svg {
   stroke: #334155 !important;
 }
 
-/* Covers compact bell icons that do not expose an aria-label. */
 html.light .lucide-bell,
 html.light .lucide-bell-ring {
   color: #475569 !important;
