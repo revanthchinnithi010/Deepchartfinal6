@@ -204,10 +204,14 @@ export class DeltaWsClient implements IBrokerWsClient {
     if (!symbol || !Number.isFinite(price) || price <= 0) return;
     const bid = this.lastBid.get(symbol);
     const ask = this.lastAsk.get(symbol);
+    const rawTs = Number(ts);
+    const eventTs = Number.isFinite(rawTs) && rawTs > 0
+      ? (rawTs > 1e12 ? rawTs / 1000 : rawTs)
+      : Date.now();
     this.emit({
       kind: "tick", broker: "delta",
       symbol, price, bid, ask,
-      ts: Number.isFinite(ts) && (ts as number) > 0 ? (ts as number) / (ts as number > 1e12 ? 1000 : 1) : Date.now(),
+      ts: eventTs,
     } as TickEvent);
   }
 
@@ -239,7 +243,7 @@ export class DeltaWsClient implements IBrokerWsClient {
         if (Number.isFinite(ask) && ask > 0) this.lastAsk.set(symbol, ask);
         if (Number.isFinite(bid) && bid > 0) this.lastBid.set(symbol, bid);
         const price = Number.isFinite(close) && close > 0 ? close : mark;
-        this.emitTick(symbol, price);
+        this.emitTick(symbol, price, Number(t.ts));
       }
       return;
     }
