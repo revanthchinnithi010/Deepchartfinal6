@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { TAP_TRANSITION, tweenFast } from "@/animations/motion";
 import { Link, useLocation } from "wouter";
@@ -20,6 +20,8 @@ const TABS: NavTab[] = [
 ];
 
 const BAR_H = 62;
+const NAV_H = 76;
+const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 
 export function MobileBottomNav() {
   const [location] = useLocation();
@@ -27,6 +29,7 @@ export function MobileBottomNav() {
   const mobileChartFullscreen = useChartStore(s => s.mobileChartFullscreen);
   const { theme } = useTheme();
   const isLight = theme === "light";
+  const shellRef = useRef<HTMLDivElement>(null);
 
   const activeIdx = TABS.findIndex(t => t.kind === "link" && t.href === location);
   const [visualIdx, setVisualIdx] = useState(activeIdx >= 0 ? activeIdx : 0);
@@ -35,7 +38,39 @@ export function MobileBottomNav() {
     if (activeIdx >= 0 && !mobileChartFullscreen) setVisualIdx(activeIdx);
   }, [activeIdx, mobileChartFullscreen]);
 
-  const shellBg = isLight ? "#f8fafc" : "transparent";
+  useLayoutEffect(() => {
+    const shell = shellRef.current;
+    const host = shell?.parentElement;
+    if (!host) return;
+
+    const background = isLight ? "#f8fafc" : "#05070a";
+    host.style.position = "fixed";
+    host.style.left = "0";
+    host.style.right = "0";
+    host.style.bottom = "0";
+    host.style.width = "100%";
+    host.style.height = `calc(${NAV_H}px + ${SAFE_BOTTOM})`;
+    host.style.boxSizing = "border-box";
+    host.style.padding = `0 0 ${SAFE_BOTTOM}`;
+    host.style.background = background;
+    host.style.backgroundImage = "none";
+    host.style.border = "0";
+    host.style.borderRadius = "0";
+    host.style.boxShadow = "none";
+    host.style.filter = "none";
+    host.style.webkitFilter = "none";
+    host.style.backdropFilter = "none";
+    host.style.webkitBackdropFilter = "none";
+    host.style.mixBlendMode = "normal";
+    host.style.opacity = "1";
+    host.style.isolation = "isolate";
+    host.style.overflow = "hidden";
+    host.style.transform = "none";
+    host.style.contain = "paint";
+    host.style.zIndex = "45";
+  }, [isLight]);
+
+  const shellBg = isLight ? "#f8fafc" : "#05070a";
   const pillBg = isLight ? "#ffffff" : "rgba(5,5,8,0.82)";
   const pillBorder = isLight ? "1px solid #e2e8f0" : "none";
   const pillShadow = isLight ? "none" : "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(0,0,0,0.40)";
@@ -47,15 +82,16 @@ export function MobileBottomNav() {
 
   return (
     <div
+      ref={shellRef}
       className="tj-mobile-nav-shell"
       data-theme={isLight ? "light" : "dark"}
       style={{
         flexShrink: 0,
         width: "100%",
-        height: 76,
-        minHeight: 76,
+        height: NAV_H,
+        minHeight: NAV_H,
         boxSizing: "border-box",
-        padding: `2px 14px 10px`,
+        padding: "2px 14px 10px",
         background: shellBg,
         position: "relative",
         boxShadow: "none",
