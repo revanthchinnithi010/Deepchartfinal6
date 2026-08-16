@@ -19,6 +19,7 @@ const block = String.raw`
 // [chart-fix] Selected drawing information tooltip.
 let __drawingTooltip: HTMLDivElement | null = null;
 let __lastDrawingPointer = { x: 0, y: 0 };
+let __allowDrawingTooltipRefresh = false;
 
 function __tooltipEscape(value: unknown): string {
   const text = String(value ?? "—");
@@ -100,14 +101,26 @@ function __refreshDrawingTooltip() {
   else __hideDrawingTooltip();
 }
 
+function __isDrawingHitTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  if (target.closest("[data-drawing-toolbar], [data-drawing-popup]")) return false;
+  const tag = target.tagName.toLowerCase();
+  return tag === "path" || tag === "circle" || tag === "line" || tag === "rect" || tag === "polygon" || tag === "polyline" || tag === "ellipse";
+}
+
 if (typeof window !== "undefined") {
   window.addEventListener("pointerdown", event => {
     __lastDrawingPointer = { x: event.clientX, y: event.clientY };
-    window.setTimeout(__refreshDrawingTooltip, 0);
+    __allowDrawingTooltipRefresh = __isDrawingHitTarget(event.target);
+    // Any tap outside an actual drawing hit area — including the empty chart
+    // area and the bottom drawing control bar — closes the tooltip immediately.
+    if (!__allowDrawingTooltipRefresh) __hideDrawingTooltip();
   }, true);
   window.addEventListener("pointerup", event => {
     __lastDrawingPointer = { x: event.clientX, y: event.clientY };
-    window.setTimeout(__refreshDrawingTooltip, 0);
+    if (__allowDrawingTooltipRefresh) window.setTimeout(__refreshDrawingTooltip, 0);
+    else __hideDrawingTooltip();
+    __allowDrawingTooltipRefresh = false;
   }, true);
   window.addEventListener("pointermove", event => {
     __lastDrawingPointer = { x: event.clientX, y: event.clientY };
@@ -123,4 +136,4 @@ if (typeof window !== "undefined") {
 
 src = src.replace(marker, marker + block);
 fs.writeFileSync(file, src, "utf8");
-console.log("[drawing-fix] Selected drawing tooltip rebuilt without popup/dialog hiding logic.");
+console.log("[drawing-fix] Tooltip now closes on empty chart/control-bar taps and remains on drawing selection.");
