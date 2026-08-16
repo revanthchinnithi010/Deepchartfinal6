@@ -22,6 +22,7 @@ const TABS: NavTab[] = [
 
 const BAR_H = 62;
 const NAV_H = 76;
+const FOOTER_PLANE_H = 112;
 const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 const NAV_Z = "2147483647";
 
@@ -47,15 +48,15 @@ export function MobileBottomNav() {
     if (!host) return;
     const setImportant = (property: string, value: string) => host.style.setProperty(property, value, "important");
 
-    // This element is portaled directly into document.body. It must be above
-    // every Dashboard/card/compositor layer; z-index 45 allowed elevated card
-    // shadows to paint over the footer during the second loading pass.
+    // The footer is portaled to document.body. Keep the entire bottom plane
+    // above Dashboard/card compositing layers so their shadows can never paint
+    // over the light footer during the second loading phase.
     setImportant("position", "fixed");
     setImportant("left", "0");
     setImportant("right", "0");
     setImportant("bottom", "0");
     setImportant("width", "100%");
-    setImportant("height", `calc(${NAV_H}px + ${SAFE_BOTTOM})`);
+    setImportant("height", `calc(${FOOTER_PLANE_H}px + ${SAFE_BOTTOM})`);
     setImportant("box-sizing", "border-box");
     setImportant("padding", `0 0 ${SAFE_BOTTOM}`);
     setImportant("background", isLight ? "#f8fafc" : "#05070a");
@@ -106,7 +107,7 @@ export function MobileBottomNav() {
         right: 0,
         bottom: 0,
         width: "100%",
-        height: `calc(${NAV_H}px + ${SAFE_BOTTOM})`,
+        height: `calc(${FOOTER_PLANE_H}px + ${SAFE_BOTTOM})`,
         boxSizing: "border-box",
         padding: `0 0 ${SAFE_BOTTOM}`,
         background: shellBg,
@@ -131,7 +132,7 @@ export function MobileBottomNav() {
         overflow: "hidden",
       }}
     >
-      <div className="tj-mobile-nav-shell" style={{ width: "100%", height: NAV_H, minHeight: NAV_H, boxSizing: "border-box", padding: "2px 14px 10px", background: shellBg, position: "relative", boxShadow: "none", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "isolate", contain: "none", transform: "none", overflow: "hidden" }}>
+      <div className="tj-mobile-nav-shell" style={{ position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: `calc(${NAV_H}px + ${SAFE_BOTTOM})`, minHeight: NAV_H, boxSizing: "border-box", padding: "2px 14px 10px", background: shellBg, boxShadow: "none", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "isolate", contain: "none", transform: "none", overflow: "hidden" }}>
         <div className="tj-mobile-nav-pill" style={{ height: BAR_H, borderRadius: 9999, padding: 0, width: "100%", background: pillBg, border: pillBorder, boxShadow: pillShadow, position: "relative", overflow: "hidden", display: "flex", boxSizing: "border-box", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "isolate" }}>
           {TABS.map((tab, idx) => {
             const active = idx === visualIdx;
