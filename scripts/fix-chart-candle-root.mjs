@@ -97,14 +97,13 @@ if (!fs.existsSync(overlayFile)) throw new Error(`Drawing overlay file not found
 let overlay = fs.readFileSync(overlayFile, "utf8");
 let overlayChanged = false;
 
-// Avoid embedding ${BASE} in a build-time template literal: find the function by markers.
 const saveStart = overlay.indexOf("  const saveDrawing = async (pts: DrawingPoint[]) => {");
 if (saveStart >= 0) {
   const saveEndMarker = "  };";
   const saveEnd = overlay.indexOf(saveEndMarker, saveStart);
   if (saveEnd < 0) throw new Error("Drawing save function end marker not found");
 
-  const newSaveDrawingTemplate = `  const saveDrawing = async (pts: DrawingPoint[]) => {
+  const newSaveDrawingTemplate = `  const saveDrawing = (pts: DrawingPoint[]) => {
     // Optimistic UI: paint the completed drawing immediately; persistence is background-only.
     const tempId = -Math.max(1, Date.now());
     const optimistic: Drawing = {
@@ -121,26 +120,24 @@ if (saveStart >= 0) {
     addDrawing(optimistic);
     selectDrawing(tempId);
 
-    try {
-      const res = await fetch(__BASE_TOKEN__, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),
-      });
-      if (res.ok) {
-        const saved: Drawing = await res.json();
+    fetch(__BASE_TOKEN__, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),
+    })
+      .then(res => {
+        if (!res.ok) throw new Error("Drawing save failed");
+        return res.json();
+      })
+      .then((saved: Drawing) => {
         const current = useDrawingStore.getState().drawings;
         useDrawingStore.getState().setDrawings(current.map(d => d.id === tempId ? saved : d));
         selectDrawing(saved.id);
-      } else {
+      })
+      .catch(() => {
         const current = useDrawingStore.getState().drawings;
         useDrawingStore.getState().setDrawings(current.filter(d => d.id !== tempId));
         selectDrawing(null);
-      }
-    } catch {
-      const current = useDrawingStore.getState().drawings;
-      useDrawingStore.getState().setDrawings(current.filter(d => d.id !== tempId));
-      selectDrawing(null);
-    }
+      });
   };`;
   const newSaveDrawing = newSaveDrawingTemplate.replace("__BASE_TOKEN__", "`${BASE}/api/drawings`");
   overlay = overlay.slice(0, saveStart) + newSaveDrawing + overlay.slice(saveEnd + saveEndMarker.length);
