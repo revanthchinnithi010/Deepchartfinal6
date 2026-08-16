@@ -192,11 +192,19 @@
   mix-blend-mode: normal !important;
 }
 
-/* Dashboard quick-access Alerts icon: white circle + dark icon in light mode. */
+/* Dashboard quick-access Alerts: keep the button itself transparent and make
+   only the 64px icon container a true white circle in light mode. */
 .light button:has(svg path[fill="rgba(255,255,255,0.55)"]) {
+  background: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.light button:has(svg path[fill="rgba(255,255,255,0.55)"]) > div {
   background: #ffffff !important;
+  border: 1px solid rgba(15,23,42,.06) !important;
   border-radius: 9999px !important;
-  box-shadow: 0 6px 18px rgba(15,23,42,.06) !important;
+  box-shadow: 0 6px 18px rgba(15,23,42,.06), inset 0 1px 0 rgba(255,255,255,.98) !important;
 }
 
 .light button:has(svg path[fill="rgba(255,255,255,0.55)"]) svg path {
