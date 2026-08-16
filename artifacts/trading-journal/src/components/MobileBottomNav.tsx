@@ -20,7 +20,7 @@ const TABS: NavTab[] = [
   { kind: "link", href: "/alerts", label: "Alerts", Icon: Bell },
 ];
 
-const BAR_H = 62;
+const BAR_H = 58;
 const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 const NAV_Z = "2147483647";
 
@@ -78,11 +78,6 @@ export function MobileBottomNav() {
     setImportant("z-index", NAV_Z);
     setImportant("overflow", "visible");
 
-    // The navigation is portaled directly to document.body. Keep the body/root
-    // canvas itself free of the dark footer plane that was appearing underneath
-    // the transparent navigation area after Dashboard/Markets finished mounting.
-    // This is intentionally separate from the pill styling: the surrounding
-    // area must reveal the actual page background, never a black layer.
     const body = document.body;
     const html = document.documentElement;
     const pageBg = isLight ? "#f8fafc" : "#000000";
@@ -99,14 +94,13 @@ export function MobileBottomNav() {
 
   if (typeof document === "undefined") return null;
 
-  const pillBg = isLight ? "#ffffff" : "rgba(5,5,8,0.82)";
-  const pillBorder = isLight ? "1px solid #e2e8f0" : "none";
-  const pillShadow = "none";
+  const barBg = isLight ? "#ffffff" : "#0d0d0d";
+  const barBorder = isLight ? "1px solid #e2e8f0" : "1px solid rgba(255,255,255,0.07)";
   const activeIconColor = isLight ? "#111827" : "#ffffff";
-  const inactiveIconColor = isLight ? "#64748b" : "rgba(148,163,184,0.44)";
+  const inactiveIconColor = isLight ? "#64748b" : "rgba(148,163,184,0.52)";
   const activeLabelColor = isLight ? "#111827" : "rgba(255,255,255,0.92)";
-  const inactiveLabelColor = isLight ? "#64748b" : "rgba(148,163,184,0.40)";
-  const badgeBorder = isLight ? "#ffffff" : "rgba(5,5,8,0.9)";
+  const inactiveLabelColor = isLight ? "#64748b" : "rgba(148,163,184,0.48)";
+  const badgeBorder = isLight ? "#ffffff" : "#0d0d0d";
 
   return createPortal(
     <div
@@ -146,20 +140,88 @@ export function MobileBottomNav() {
         overflow: "visible",
       }}
     >
-      <div className="tj-mobile-nav-container" style={{ position: "absolute", left: 0, right: 0, bottom: SAFE_BOTTOM, width: "100%", height: BAR_H, minHeight: BAR_H, boxSizing: "border-box", padding: 0, background: "transparent", backgroundColor: "transparent", backgroundImage: "none", border: 0, borderRadius: 0, boxShadow: "none", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "auto", contain: "none", transform: "none", overflow: "visible" }}>
-        <div className="tj-mobile-nav-pill" style={{ height: BAR_H, borderRadius: 9999, padding: 0, margin: 0, width: "calc(100% - 28px)", marginLeft: 14, background: pillBg, backgroundColor: pillBg, backgroundImage: "none", border: pillBorder, boxShadow: pillShadow, position: "relative", overflow: "hidden", display: "flex", boxSizing: "border-box", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "auto" }}>
+      <div
+        className="tj-mobile-nav-container"
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: SAFE_BOTTOM,
+          width: "100%",
+          height: BAR_H,
+          minHeight: BAR_H,
+          boxSizing: "border-box",
+          padding: 0,
+          background: barBg,
+          backgroundColor: barBg,
+          backgroundImage: "none",
+          borderTop: barBorder,
+          borderBottom: 0,
+          borderLeft: 0,
+          borderRight: 0,
+          borderRadius: 0,
+          boxShadow: "none",
+          filter: "none",
+          WebkitFilter: "none",
+          backdropFilter: "none",
+          WebkitBackdropFilter: "none",
+          isolation: "auto",
+          contain: "none",
+          transform: "none",
+          overflow: "visible",
+        }}
+      >
+        <div
+          className="tj-mobile-nav-pill"
+          style={{
+            height: BAR_H,
+            borderRadius: 0,
+            padding: 0,
+            margin: 0,
+            width: "100%",
+            background: barBg,
+            backgroundColor: barBg,
+            backgroundImage: "none",
+            border: 0,
+            boxShadow: "none",
+            position: "relative",
+            overflow: "hidden",
+            display: "flex",
+            boxSizing: "border-box",
+            filter: "none",
+            WebkitFilter: "none",
+            backdropFilter: "none",
+            WebkitBackdropFilter: "none",
+            isolation: "auto",
+          }}
+        >
           {TABS.map((tab, idx) => {
             const active = idx === visualIdx;
             const isAlerts = tab.kind === "link" && tab.href === "/alerts";
             const badge = isAlerts && unreadCount > 0 ? unreadCount : 0;
             return (
-              <Link key={tab.kind === "link" ? tab.href : `action-${idx}`} href={tab.kind === "link" ? tab.href : "/"} style={{ flex: 1, display: "flex", textDecoration: "none", WebkitTapHighlightColor: "transparent", outline: "none", position: "relative", zIndex: 10 } as React.CSSProperties}>
-                <motion.div className="tj-mobile-nav-tab" whileTap={{ scale: 0.97 }} transition={TAP_TRANSITION} style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", userSelect: "none", filter: "none", WebkitFilter: "none" }}>
-                  <motion.div animate={{ scale: active ? 1.12 : 1 }} transition={tweenFast} style={{ position: "relative", filter: "none", WebkitFilter: "none" }}>
+              <Link
+                key={tab.kind === "link" ? tab.href : `action-${idx}`}
+                href={tab.kind === "link" ? tab.href : "/"}
+                style={{ flex: 1, display: "flex", textDecoration: "none", WebkitTapHighlightColor: "transparent", outline: "none", position: "relative", zIndex: 10 } as React.CSSProperties}
+              >
+                <motion.div
+                  className="tj-mobile-nav-tab"
+                  whileTap={{ scale: 0.97 }}
+                  transition={TAP_TRANSITION}
+                  style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer", userSelect: "none", filter: "none", WebkitFilter: "none" }}
+                >
+                  <motion.div animate={{ scale: active ? 1.08 : 1 }} transition={tweenFast} style={{ position: "relative", filter: "none", WebkitFilter: "none" }}>
                     <tab.Icon style={{ width: 22, height: 22, flexShrink: 0, color: active ? activeIconColor : inactiveIconColor, transition: "color 0.22s ease", display: "block", filter: "none" }} />
-                    {badge > 0 && <span style={{ position: "absolute", top: -5, right: -6, minWidth: 14, height: 14, borderRadius: 9999, background: "#ef4444", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff", lineHeight: 1, padding: "0 3px", border: `1.5px solid ${badgeBorder}`, pointerEvents: "none" }}>{badge > 99 ? "99+" : badge}</span>}
+                    {badge > 0 && (
+                      <span style={{ position: "absolute", top: -5, right: -6, minWidth: 14, height: 14, borderRadius: 9999, background: "#ef4444", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff", lineHeight: 1, padding: "0 3px", border: `1.5px solid ${badgeBorder}`, pointerEvents: "none" }}>
+                        {badge > 99 ? "99+" : badge}
+                      </span>
+                    )}
                   </motion.div>
-                  <span style={{ fontSize: 10, lineHeight: 1, fontWeight: active ? 600 : 400, color: active ? activeLabelColor : inactiveLabelColor, letterSpacing: active ? "0.04em" : "0.01em", transition: "color 0.22s ease", whiteSpace: "nowrap" }}>{tab.label}</span>
+                  <span style={{ fontSize: 10, lineHeight: 1, fontWeight: active ? 600 : 400, color: active ? activeLabelColor : inactiveLabelColor, letterSpacing: active ? "0.04em" : "0.01em", transition: "color 0.22s ease", whiteSpace: "nowrap" }}>
+                    {tab.label}
+                  </span>
                 </motion.div>
               </Link>
             );
