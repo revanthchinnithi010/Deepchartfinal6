@@ -7,8 +7,9 @@ const repoRoot = path.resolve(scriptDir, "../../..");
 const file = path.join(repoRoot, "artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx");
 
 if (!fs.existsSync(file)) throw new Error(`DrawingOverlay.tsx not found: ${file}`);
-
 let src = fs.readFileSync(file, "utf8");
+
+// Keep the selected-drawing tooltip, but remove only the fields the user asked to hide.
 if (src.includes("data-chart-drawing-info-tooltip")) {
   src = src.replace(/\n\s*const p1 = d\.points\[0\];\n\s*const p2 = d\.points\[1\];\n\s*const point1Text = p1 \?[^\n]*\n\s*const point2Text = p2 \?[^\n]*\n/, "\n");
   src = src.replace(/\n\s*\[\"Point 1\", point1Text\],\n\s*\[\"Point 2\", point2Text\],/g, "");
@@ -31,16 +32,10 @@ if (typeof window !== "undefined") { window.addEventListener("pointerdown", even
   src = src.replace(marker, marker + block);
 }
 
-// Selected drawing -> drawing-specific alert page. Do not open the generic selector.
-const oldAlert = 'onAlert={() => { onDrawingAlert?.(d); }}';
-const newAlert = `onAlert={() => {
-              const drawingPayload = { id: d.id, displayId: d.displayId, toolType: d.toolType, symbol: d.symbol, timeframe: d.timeframe, points: d.points };
-              try { sessionStorage.setItem("pendingDrawingAlert", JSON.stringify(drawingPayload)); } catch {}
-              const target = d.toolType === "rect" ? "/alerts/create/zone" : "/alerts/create/trendline";
-              window.history.pushState({ drawingId: d.id }, "", target);
-              window.dispatchEvent(new PopStateEvent("popstate"));
-            }}`;
-if (src.includes(oldAlert)) src = src.replace(oldAlert, newAlert);
+// The alert icon on a selected drawing must use the chart's existing DrawingAlertModal.
+// This preserves automatic symbol/timeframe/point-A/point-B prefill and avoids the generic selector page.
+const wrongAlert = /onAlert=\{\(\) => \{\s*const drawingPayload = \{[\s\S]*?window\.dispatchEvent\(new PopStateEvent\("popstate"\)\);\s*\}\}/;
+src = src.replace(wrongAlert, 'onAlert={() => { onDrawingAlert?.(d); }}');
 
 fs.writeFileSync(file, src, "utf8");
-console.log("[drawing-fix] Tooltip fields cleaned and selected drawing alert now routes directly to the correct create-alert page.");
+console.log("[drawing-fix] Selected drawing alert opens the existing prefilled DrawingAlertModal; tooltip fields cleaned.");
