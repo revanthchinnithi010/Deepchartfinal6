@@ -20,7 +20,9 @@ const TABS: NavTab[] = [
   { kind: "link", href: "/alerts", label: "Alerts", Icon: Bell },
 ];
 
-const BAR_H = 58;
+// Slightly taller than the previous compact bar, while keeping the flat
+// full-width Instagram-style navigation layout.
+const BAR_H = 66;
 const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 const NAV_Z = "2147483647";
 
@@ -209,7 +211,7 @@ export function MobileBottomNav() {
                   className="tj-mobile-nav-tab"
                   whileTap={{ scale: 0.97 }}
                   transition={TAP_TRANSITION}
-                  style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer", userSelect: "none", filter: "none", WebkitFilter: "none" }}
+                  style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", userSelect: "none", filter: "none", WebkitFilter: "none" }}
                 >
                   <motion.div animate={{ scale: active ? 1.08 : 1 }} transition={tweenFast} style={{ position: "relative", filter: "none", WebkitFilter: "none" }}>
                     <tab.Icon style={{ width: 22, height: 22, flexShrink: 0, color: active ? activeIconColor : inactiveIconColor, transition: "color 0.22s ease", display: "block", filter: "none" }} />
