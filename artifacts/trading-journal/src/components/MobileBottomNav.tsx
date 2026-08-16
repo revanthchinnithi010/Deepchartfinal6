@@ -22,7 +22,9 @@ const TABS: NavTab[] = [
 
 const BAR_H = 62;
 const NAV_H = 76;
-const FOOTER_PLANE_H = 112;
+// Keep the footer plane exactly as tall as the navigation shell. Previously this
+// was 112px, which left an unnecessary blank 36px strip above the pill.
+const FOOTER_PLANE_H = NAV_H;
 const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 const NAV_Z = "2147483647";
 
@@ -48,9 +50,6 @@ export function MobileBottomNav() {
     if (!host) return;
     const setImportant = (property: string, value: string) => host.style.setProperty(property, value, "important");
 
-    // The footer is portaled to document.body. Keep the entire bottom plane
-    // above Dashboard/card compositing layers so their shadows can never paint
-    // over the light footer during the second loading phase.
     setImportant("position", "fixed");
     setImportant("left", "0");
     setImportant("right", "0");
