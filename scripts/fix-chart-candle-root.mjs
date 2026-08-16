@@ -216,3 +216,6 @@ if (!fs.existsSync(chartsPageFile) || !fs.existsSync(mobileChartFile)) {
 }
 patchChartPanelLoader(chartsPageFile, "desktop");
 patchChartPanelLoader(mobileChartFile, "mobile");
+
+// Railway rebuild trigger: keep this script changeable and deterministic.
+// The route-loader patch above remains the only runtime UI change.
