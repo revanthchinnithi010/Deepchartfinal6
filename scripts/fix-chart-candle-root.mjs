@@ -165,3 +165,54 @@ if (changed) {
     console.log("[chart-fix] Crypto 1m OHLC/autoscale repair already present; no mutation required.");
   }
 }
+
+// 5) Add a route-entry loading animation to the chart panel only. This runs
+//    during the build so the source files stay clean and the patch is idempotent.
+//    The overlay never covers the page toolbar/navigation.
+function patchChartPanelLoader(filePath, mode) {
+  let source = fs.readFileSync(filePath, "utf8");
+  let didChange = false;
+
+  if (!source.includes("__TJ_CHART_PANEL_LOADER_V1__")) {
+    if (mode === "desktop") {
+      const fn = "export default function Charts() {";
+      const state = `${fn}\n  /* __TJ_CHART_PANEL_LOADER_V1__ */\n  const [chartRouteLocation] = useLocation();\n  const [chartPanelLoading, setChartPanelLoading] = useState(false);\n  const chartRoutePath = chartRouteLocation.split("?")[0];\n  useEffect(() => {\n    if (chartRoutePath !== "/charts") return;\n    setChartPanelLoading(true);\n    const timer = window.setTimeout(() => setChartPanelLoading(false), 650);\n    return () => window.clearTimeout(timer);\n  }, [chartRoutePath]);`;
+      if (!source.includes(fn) || !source.includes('import { Router as WouterRouter, useLocation }')) {
+        throw new Error("[chart-loader] Desktop Charts route markers not found");
+      }
+      source = source.replace(fn, state, 1);
+      const chartArea = `<div\n            ref={chartAreaRef}`;
+      const overlay = `${chartArea}\n\n            {chartPanelLoading && (\n              <div aria-label="Loading chart" style={{ position: "absolute", inset: 0, zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(7,17,13,0.55)", backdropFilter: "blur(2px)", WebkitBackdropFilter: "blur(2px)", pointerEvents: "all" }}>\n                <div style={{ width: 38, height: 38, borderRadius: "50%", border: "3px solid rgba(255,255,255,0.16)", borderTopColor: "#ffffff", animation: "spin 0.7s linear infinite" }} />\n              </div>\n            )}`;
+      if (!source.includes(chartArea)) throw new Error("[chart-loader] Desktop chart area marker not found");
+      source = source.replace(chartArea, overlay, 1);
+      didChange = true;
+    } else {
+      const fn = "export const MobileChartLayout = memo(function MobileChartLayout(props: MobileChartLayoutProps) {";
+      const state = `${fn}\n  /* __TJ_CHART_PANEL_LOADER_V1__ */\n  const [chartPanelLoading, setChartPanelLoading] = useState(false);\n  const chartRoutePath = location.split("?")[0];\n  useEffect(() => {\n    if (chartRoutePath !== "/charts") return;\n    setChartPanelLoading(true);\n    const timer = window.setTimeout(() => setChartPanelLoading(false), 650);\n    return () => window.clearTimeout(timer);\n  }, [chartRoutePath]);`;
+      if (!source.includes(fn) || !source.includes("const [location, navigate]")) {
+        throw new Error("[chart-loader] Mobile route markers not found");
+      }
+      source = source.replace(fn, state, 1);
+      const chartArea = `<div ref={chartAreaRef} style={{ flex:1, minHeight:0, position:"relative", overflow:"hidden", touchAction:"none" }}>`;
+      const overlay = `${chartArea}\n        {chartPanelLoading && (\n          <div aria-label="Loading chart" style={{ position:"absolute", inset:0, zIndex:80, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(8,9,15,0.55)", backdropFilter:"blur(2px)", WebkitBackdropFilter:"blur(2px)", pointerEvents:"all" }}>\n            <div style={{ width:38, height:38, borderRadius:"50%", border:"3px solid rgba(255,255,255,0.16)", borderTopColor:"#ffffff", animation:"spin 0.7s linear infinite" }} />\n          </div>\n        )}`;
+      if (!source.includes(chartArea)) throw new Error("[chart-loader] Mobile chart area marker not found");
+      source = source.replace(chartArea, overlay, 1);
+      didChange = true;
+    }
+  }
+
+  if (didChange) {
+    fs.writeFileSync(filePath, source);
+    console.log(`[chart-loader] Patched ${mode === "desktop" ? "Charts" : "MobileChartLayout"} with chart-panel-only route loader`);
+  } else {
+    console.log(`[chart-loader] ${mode === "desktop" ? "Charts" : "MobileChartLayout"} loader already present; no mutation required`);
+  }
+}
+
+const chartsPageFile = path.join(repoRoot, "artifacts/trading-journal/src/pages/charts.tsx");
+const mobileChartFile = path.join(repoRoot, "artifacts/trading-journal/src/components/charts/MobileChartLayout.tsx");
+if (!fs.existsSync(chartsPageFile) || !fs.existsSync(mobileChartFile)) {
+  throw new Error("[chart-loader] Chart page source files not found");
+}
+patchChartPanelLoader(chartsPageFile, "desktop");
+patchChartPanelLoader(mobileChartFile, "mobile");
