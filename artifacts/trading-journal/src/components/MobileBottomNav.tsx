@@ -77,13 +77,30 @@ export function MobileBottomNav() {
     setImportant("will-change", "auto");
     setImportant("z-index", NAV_Z);
     setImportant("overflow", "visible");
-  }, [hidden]);
+
+    // The navigation is portaled directly to document.body. Keep the body/root
+    // canvas itself free of the dark footer plane that was appearing underneath
+    // the transparent navigation area after Dashboard/Markets finished mounting.
+    // This is intentionally separate from the pill styling: the surrounding
+    // area must reveal the actual page background, never a black layer.
+    const body = document.body;
+    const html = document.documentElement;
+    const pageBg = isLight ? "#f8fafc" : "#000000";
+    body.style.setProperty("background", pageBg, "important");
+    body.style.setProperty("background-color", pageBg, "important");
+    body.style.setProperty("background-image", "none", "important");
+    body.style.setProperty("box-shadow", "none", "important");
+    body.style.setProperty("filter", "none", "important");
+    body.style.setProperty("backdrop-filter", "none", "important");
+    html.style.setProperty("background", pageBg, "important");
+    html.style.setProperty("background-color", pageBg, "important");
+    html.style.setProperty("background-image", "none", "important");
+  }, [hidden, isLight]);
 
   if (typeof document === "undefined") return null;
 
   const pillBg = isLight ? "#ffffff" : "rgba(5,5,8,0.82)";
   const pillBorder = isLight ? "1px solid #e2e8f0" : "none";
-  // No shadow/glow at all. The pill itself is the only visible navigation surface.
   const pillShadow = "none";
   const activeIconColor = isLight ? "#111827" : "#ffffff";
   const inactiveIconColor = isLight ? "#64748b" : "rgba(148,163,184,0.44)";
