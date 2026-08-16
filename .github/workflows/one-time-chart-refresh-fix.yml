@@ -1,0 +1,65 @@
+name: One-time chart refresh lifecycle fix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    if: github.event.head_commit.message != 'fix: refresh chart on navigation and foreground'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Patch chart lifecycle
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          custom = Path('artifacts/trading-journal/src/components/charts/CustomChart.tsx')
+          text = custom.read_text()
+
+          old = 'const loadCandles = useCallback(async (sym: string, iv: string) => {'
+          new = 'const loadCandles = useCallback(async (sym: string, iv: string, forceFresh = false) => {'
+          if old not in text:
+              raise SystemExit('CustomChart: loadCandles signature not found')
+          text = text.replace(old, new, 1)
+
+          old = 'const cached = getCachedCandles(sym, iv);'
+          new = 'const cached = forceFresh ? null : getCachedCandles(sym, iv);'
+          if old not in text:
+              raise SystemExit('CustomChart: cache lookup not found')
+          text = text.replace(old, new, 1)
+
+          marker = '''  useEffect(() => {\n    if (replayBars != null) return; // skip fetch during replay\n    void loadCandles(symbol, interval);\n  }, [symbol, interval, loadCandles, replayBars]);\n'''
+          insert = marker + '''\n  // Hard-refresh the chart whenever the app returns to the foreground or the\n  // Charts tab is opened. Mobile browsers can suspend WebSockets/timers while\n  // backgrounded; keeping the old in-memory series then produces missing\n  // candle slots when live updates resume. Always re-fetch authoritative OHLC\n  // first, then seed the live tick aggregator from the fresh last candle.\n  useEffect(() => {\n    if (replayBars != null) return;\n\n    const refresh = () => {\n      if (document.visibilityState === "hidden") return;\n      void loadCandles(symbol, interval, true);\n    };\n\n    const onVisibility = () => {\n      if (document.visibilityState === "visible") refresh();\n    };\n    const onPageShow = () => refresh();\n    const onChartRefresh = () => refresh();\n\n    document.addEventListener("visibilitychange", onVisibility);\n    window.addEventListener("pageshow", onPageShow);\n    window.addEventListener("tj:chart-refresh", onChartRefresh);\n\n    return () => {\n      document.removeEventListener("visibilitychange", onVisibility);\n      window.removeEventListener("pageshow", onPageShow);\n      window.removeEventListener("tj:chart-refresh", onChartRefresh);\n    };\n  }, [symbol, interval, loadCandles, replayBars]);\n'''
+          if marker not in text:
+              raise SystemExit('CustomChart: loadCandles effect marker not found')
+          text = text.replace(marker, insert, 1)
+          custom.write_text(text)
+
+          nav = Path('artifacts/trading-journal/src/components/MobileBottomNav.tsx')
+          ntext = nav.read_text()
+          old = '''                style={{ flex: 1, display: "flex", textDecoration: "none", WebkitTapHighlightColor: "transparent", outline: "none", position: "relative", zIndex: 10 } as React.CSSProperties}\n'''
+          new = '''                onClick={() => {\n                  if (tab.kind === "link" && tab.href === "/charts") {\n                    window.dispatchEvent(new Event("tj:chart-refresh"));\n                  }\n                }}\n                style={{ flex: 1, display: "flex", textDecoration: "none", WebkitTapHighlightColor: "transparent", outline: "none", position: "relative", zIndex: 10 } as React.CSSProperties}\n'''
+          if old not in ntext:
+              raise SystemExit('MobileBottomNav: Link style marker not found')
+          ntext = ntext.replace(old, new, 1)
+          nav.write_text(ntext)
+          print('Chart lifecycle patch applied')
+          PY
+
+      - name: Commit fix and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/one-time-chart-refresh-fix.yml
+          git add artifacts/trading-journal/src/components/charts/CustomChart.tsx artifacts/trading-journal/src/components/MobileBottomNav.tsx .github/workflows/one-time-chart-refresh-fix.yml
+          git commit -m "fix: refresh chart on navigation and foreground"
+          git push origin main
