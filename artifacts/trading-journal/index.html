@@ -6,7 +6,7 @@
     <title>TradeVault</title>
     <meta name="description" content="TradeVault — Premium Trading Journal. Track trades, analyze performance, and grow as a trader." />
     <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#f8fafc" />
+    <meta name="theme-color" content="#0b0b0b" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -18,10 +18,9 @@
     <meta name="twitter:title" content="TradeVault" />
     <meta name="twitter:description" content="Premium Trading Journal" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
+    <link rel="icon" type="image/svg+xml" href="/deepchartslogo.svg" />
+    <link rel="shortcut icon" type="image/svg+xml" href="/deepchartslogo.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/deepchartslogo.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..800&family=Dancing+Script:wght@400;700&family=Cinzel+Decorative:wght@700;900&display=swap" rel="stylesheet">
@@ -34,12 +33,6 @@
           if (mode === 'light' || mode === 'dark') {
             light = mode === 'light';
           } else {
-            // No stored preference yet: default to light, matching
-            // ThemeContext's getInitialMode(). This app's dashboard is
-            // always rendered with light/white surfaces, so following the
-            // OS "system" dark-mode preference here caused the status bar
-            // and bottom nav bar to paint black on devices with system
-            // dark mode on, while the visible content stayed white.
             light = true;
           }
           var meta = document.querySelector('meta[name="theme-color"]');
