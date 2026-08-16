@@ -32,6 +32,9 @@ if (typeof window !== "undefined") { window.addEventListener("pointerdown", even
   src = src.replace(marker, marker + block);
 }
 
+// Never allow the drawing tooltip to sit above application modals.
+src = src.replace(/z-index:2147483647/g, "z-index:180");
+
 // The alert icon on a selected drawing must use the chart's existing DrawingAlertModal.
 // Hide the drawing tooltip first so it cannot cover the modal on mobile.
 const wrongAlert = /onAlert=\{\(\) => \{\s*const drawingPayload = \{[\s\S]*?window\.dispatchEvent\(new PopStateEvent\("popstate"\)\);\s*\}\}/;
@@ -48,4 +51,4 @@ if (fs.existsSync(modalFile)) {
 }
 
 fs.writeFileSync(file, src, "utf8");
-console.log("[drawing-fix] Selected drawing alert opens the prefilled modal, tooltip is hidden/behind modal, and trendline/zone actions use explicit Add labels.");
+console.log("[drawing-fix] Selected drawing alert opens the prefilled modal, tooltip is behind modal, and trendline/zone actions use explicit Add labels.");
