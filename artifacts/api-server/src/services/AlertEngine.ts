@@ -898,20 +898,27 @@ export class AlertEngine {
    * touch, so sparse ticks do not make the alert unreliable.
    */
   private trendlineTouchTolerance(symbol: string, price: number): number {
-    const s = symbol.toUpperCase().replace(/\.(pro|raw|ecn|std)$/i, "");
+  const s = symbol.toUpperCase().replace(/\.(pro|raw|ecn|std)$/i, "");
 
-    // JPY pairs normally quote to 3 decimals; use 0.1 pip.
-    if (/JPY$/.test(s)) return 0.0001;
+  // FX pairs use broker-standard pip precision.
+  if (/JPY$/.test(s)) return 0.0001;
+  if (/^[A-Z]{6}$/.test(s)) return 0.00001;
 
-    // Standard 5-decimal FX pairs: 0.1 pip.
-    if (/^[A-Z]{6}$/.test(s)) return 0.00001;
+  // Crypto/other instruments must use a genuinely tiny absolute
+  // tolerance. Never use a fixed 0.0001 floor: on low-priced coins
+  // such as 1000PEPEUSD (~0.0026), that would be ~3.8% of price and
+  // can trigger a visible false "touch" while price is still away
+  // from the drawn line.
+  const p = Math.abs(price);
+  if (p >= 10_000) return 0.10;
+  if (p >= 1_000)  return 0.01;
+  if (p >= 100)     return 0.001;
+  if (p >= 1)       return 0.00001;
+  if (p >= 0.01)    return 0.000001;
+  return 0.00000001;
+}
 
-    // Crypto/other instruments: 0.001% is still deliberately tight.
-    // Cap it so high-priced assets cannot get a multi-dollar false band.
-    return Math.max(0.0001, Math.min(Math.abs(price) * 0.00001, 0.10));
-  }
-
-  private isTrendlineTouch(
+private isTrendlineTouch(
     id: number,
     symbol: string,
     price: number,
