@@ -127,8 +127,25 @@
   backdrop-filter: blur(18px) saturate(140%);
 }
 
-/* Light-mode header identity. Dark mode keeps the original shimmer colour. */
-.light .signature-shimmer {
+/* Light-mode header identity — REVANTH must be clearly visible in black. */
+.light .signature-shimmer,
+.light [class*="signature-shimmer"],
+html.light .signature-shimmer,
+html.light [class*="signature-shimmer"] {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  background: none !important;
+  background-image: none !important;
+  text-shadow: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  filter: none !important;
+}
+
+/* If the dashboard brand is rendered through the shimmer wrapper, force its
+   text node and common descendants to inherit the light-mode black identity. */
+.light .signature-shimmer *,
+html.light .signature-shimmer * {
   color: #111827 !important;
   -webkit-text-fill-color: #111827 !important;
   text-shadow: none !important;
@@ -237,10 +254,6 @@
 .light .text-red-400,
 .light .text-red-500 { color: #DC2626 !important; }
 
-/* Mobile light-theme footer: force a large opaque compositor plane above
-   every dashboard/card layer. Do not use transform/contain here; those create
-   extra containing/compositing contexts on Chromium and can expose stale
-   shadow pixels during the skeleton -> card transition. */
 @media (max-width:768px) {
   html.light .tj-mobile-nav-host {
     position: fixed !important;
