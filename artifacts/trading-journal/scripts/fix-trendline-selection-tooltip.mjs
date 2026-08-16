@@ -20,8 +20,6 @@ if (!src.includes(marker)) throw new Error("DrawingOverlay BASE marker not found
 const block = String.raw`
 
 // [chart-fix] Selected trendline information tooltip.
-// Uses the existing Zustand selection state so mouse and touch selection share
-// exactly the same source of truth and never block chart panning.
 let __drawingTooltip: HTMLDivElement | null = null;
 let __lastDrawingPointer = { x: 0, y: 0 };
 
@@ -68,35 +66,36 @@ function __showDrawingTooltip(d: Drawing) {
   const alert = __findTrendlineAlert(d);
   const p1 = d.points[0];
   const p2 = d.points[1];
-  const alertSet = Boolean(alert);
-  const triggerText = alert?.status === "triggered" ? "Triggered" : "Not triggered";
-
+  const point1Text = p1 ? new Date(Number(p1.time) * 1000).toLocaleString() + " • " + Number(p1.price).toFixed(6) : "—";
+  const point2Text = p2 ? new Date(Number(p2.time) * 1000).toLocaleString() + " • " + Number(p2.price).toFixed(6) : "—";
   const rows: Array<[string, string]> = [
-    ["Alert", alertSet ? "Set" : "Not set"],
-    ["Id", d.displayId ?? String(d.id)],
-    ["Trigger", triggerText],
-    ["Symbol", d.symbol],
-    ["Timeframe", d.timeframe],
-    ["Point 1", p1 ? `${new Date(Number(p1.time) * 1000).toLocaleString()} • ${Number(p1.price).toFixed(6)}` : "—"],
-    ["Point 2", p2 ? `${new Date(Number(p2.time) * 1000).toLocaleString()} • ${Number(p2.price).toFixed(6)}` : "—"],
-    ["Condition", alert?.condition ?? "—"],
-    ["Alert ID", alert?.id ?? "—"],
+    ["Alert", alert ? "Set" : "Not set"],
+    ["Id", String(d.displayId ?? d.id)],
+    ["Trigger", alert?.status === "triggered" ? "Triggered" : "Not triggered"],
+    ["Symbol", String(d.symbol)],
+    ["Timeframe", String(d.timeframe)],
+    ["Point 1", point1Text],
+    ["Point 2", point2Text],
+    ["Condition", String(alert?.condition ?? "—")],
+    ["Alert ID", String(alert?.id ?? "—")],
     ["Created", d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"],
     ["Locked", d.isLocked ? "Yes" : "No"],
     ["Visible", d.isVisible ? "Yes" : "No"],
   ];
-
-  el.innerHTML = `<div style="font-weight:700;font-size:13px;margin-bottom:8px">Trendline</div>${rows.map(([key, value]) =>
-    `<div style="display:flex;gap:12px;justify-content:space-between;border-top:1px solid rgba(255,255,255,.07);padding:5px 0"><span style="color:#9ca3af">${__tooltipEscape(key)}</span><span style="text-align:right;max-width:205px;overflow-wrap:anywhere">${__tooltipEscape(value)}</span></div>`
-  ).join("")}`;
+  const rowHtml = rows.map(([key, value]) =>
+    "<div style=\"display:flex;gap:12px;justify-content:space-between;border-top:1px solid rgba(255,255,255,.07);padding:5px 0\"><span style=\"color:#9ca3af\">" +
+    __tooltipEscape(key) + "</span><span style=\"text-align:right;max-width:205px;overflow-wrap:anywhere\">" +
+    __tooltipEscape(value) + "</span></div>"
+  ).join("");
+  el.innerHTML = "<div style=\"font-weight:700;font-size:13px;margin-bottom:8px\">Trendline</div>" + rowHtml;
   el.style.display = "block";
 
   const pad = 12;
   const rect = el.getBoundingClientRect();
   const left = Math.min(Math.max(pad, __lastDrawingPointer.x + 14), Math.max(pad, window.innerWidth - rect.width - pad));
   const top = Math.min(Math.max(pad, __lastDrawingPointer.y + 14), Math.max(pad, window.innerHeight - rect.height - pad));
-  el.style.left = `${left}px`;
-  el.style.top = `${top}px`;
+  el.style.left = left + "px";
+  el.style.top = top + "px";
 }
 
 if (typeof window !== "undefined") {
@@ -108,7 +107,6 @@ if (typeof window !== "undefined") {
       if (selected) __showDrawingTooltip(selected); else __hideDrawingTooltip();
     }, 0);
   }, true);
-
   useDrawingStore.subscribe((state, previous) => {
     if (state.selectedDrawingId === previous.selectedDrawingId) return;
     const selected = state.selectedDrawingId == null ? null : state.drawings.find(d => d.id === state.selectedDrawingId);
