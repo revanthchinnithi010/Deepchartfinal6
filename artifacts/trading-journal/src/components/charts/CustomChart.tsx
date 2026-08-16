@@ -5,7 +5,9 @@ import { useChartStore } from "@/store/chartStore";
 
 type CustomChartProps = ComponentProps<typeof CustomChartBase>;
 
-const STALE_AFTER_MS = 5 * 60 * 1000;
+// Mobile browsers can pause realtime delivery while the app is in the background.
+// Refresh after a short meaningful pause so the chart never resumes with gaps.
+const STALE_AFTER_MS = 30 * 1000;
 
 export default function CustomChart(props: CustomChartProps) {
   const { children, interval, ...rest } = props;
@@ -19,29 +21,25 @@ export default function CustomChart(props: CustomChartProps) {
       window.dispatchEvent(new Event("tj:chart-refresh"));
     };
 
+    const refreshAfterHiddenPeriod = () => {
+      const hiddenAt = hiddenAtRef.current;
+      hiddenAtRef.current = null;
+      if (hiddenAt == null) return;
+      if (Date.now() - hiddenAt >= STALE_AFTER_MS) markFreshLoad();
+    };
+
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         hiddenAtRef.current = Date.now();
         return;
       }
-
-      const hiddenFor = hiddenAtRef.current == null
-        ? Number.POSITIVE_INFINITY
-        : Date.now() - hiddenAtRef.current;
-      hiddenAtRef.current = null;
-
-      // Only show the loading screen after a genuinely stale background
-      // period. Short tab/app switches stay instant; a long pause gets a
-      // fresh authoritative candle request before the chart is shown again.
-      if (hiddenFor >= STALE_AFTER_MS) markFreshLoad();
+      refreshAfterHiddenPeriod();
     };
 
     const onPageShow = () => {
-      const hiddenFor = hiddenAtRef.current == null
-        ? Number.POSITIVE_INFINITY
-        : Date.now() - hiddenAtRef.current;
-      hiddenAtRef.current = null;
-      if (hiddenFor >= STALE_AFTER_MS) markFreshLoad();
+      // Only handle a real bfcache/background restore. Ignore the initial
+      // pageshow because normal chart bootstrap already owns that loading state.
+      refreshAfterHiddenPeriod();
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
