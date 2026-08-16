@@ -56,10 +56,8 @@ export function MobileBottomNav() {
     setImportant("height", `calc(${FOOTER_PLANE_H}px + ${SAFE_BOTTOM})`);
     setImportant("box-sizing", "border-box");
     setImportant("padding", `0 0 ${SAFE_BOTTOM}`);
-    // The area around the pill must be completely transparent so the page
-    // remains visible behind it. Only the rounded navigation pill gets a
-    // background/border.
     setImportant("background", "transparent");
+    setImportant("background-color", "transparent");
     setImportant("background-image", "none");
     setImportant("border", "0");
     setImportant("border-radius", "0");
@@ -73,7 +71,7 @@ export function MobileBottomNav() {
     setImportant("opacity", hidden ? "0" : "1");
     setImportant("visibility", hidden ? "hidden" : "visible");
     setImportant("pointer-events", hidden ? "none" : "auto");
-    setImportant("isolation", "isolate");
+    setImportant("isolation", "auto");
     setImportant("contain", "none");
     setImportant("clip-path", "none");
     setImportant("-webkit-clip-path", "none");
@@ -110,6 +108,7 @@ export function MobileBottomNav() {
         boxSizing: "border-box",
         padding: `0 0 ${SAFE_BOTTOM}`,
         background: "transparent",
+        backgroundColor: "transparent",
         backgroundImage: "none",
         border: 0,
         borderRadius: 0,
@@ -122,7 +121,7 @@ export function MobileBottomNav() {
         opacity: hidden ? 0 : 1,
         visibility: hidden ? "hidden" : "visible",
         pointerEvents: hidden ? "none" : "auto",
-        isolation: "isolate",
+        isolation: "auto",
         contain: "none",
         clipPath: "none",
         transform: "none",
@@ -131,8 +130,11 @@ export function MobileBottomNav() {
         overflow: "visible",
       }}
     >
-      <div className="tj-mobile-nav-shell" style={{ position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: `calc(${NAV_H}px + ${SAFE_BOTTOM})`, minHeight: NAV_H, boxSizing: "border-box", padding: "2px 14px 10px", background: "transparent", boxShadow: "none", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "isolate", contain: "none", transform: "none", overflow: "visible" }}>
-        <div className="tj-mobile-nav-pill" style={{ height: BAR_H, borderRadius: 9999, padding: 0, width: "100%", background: pillBg, border: pillBorder, boxShadow: pillShadow, position: "relative", overflow: "hidden", display: "flex", boxSizing: "border-box", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "isolate" }}>
+      {/* Deliberately not named .tj-mobile-nav-shell: old global compositor CSS
+          targets that class and paints a rectangular footer. The surrounding
+          layer must stay fully transparent; only the pill below is painted. */}
+      <div className="tj-mobile-nav-container" style={{ position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: `calc(${NAV_H}px + ${SAFE_BOTTOM})`, minHeight: NAV_H, boxSizing: "border-box", padding: "2px 14px 10px", background: "transparent", backgroundColor: "transparent", backgroundImage: "none", border: 0, boxShadow: "none", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "auto", contain: "none", transform: "none", overflow: "visible" }}>
+        <div className="tj-mobile-nav-pill" style={{ height: BAR_H, borderRadius: 9999, padding: 0, width: "100%", background: pillBg, backgroundColor: pillBg, backgroundImage: "none", border: pillBorder, boxShadow: pillShadow, position: "relative", overflow: "hidden", display: "flex", boxSizing: "border-box", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "auto" }}>
           {TABS.map((tab, idx) => {
             const active = idx === visualIdx;
             const isAlerts = tab.kind === "link" && tab.href === "/alerts";
