@@ -27,14 +27,14 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
         borderRadius: 12,
         padding: 4,
         contain: "layout paint",
-        background: "#e5e7eb",
+        background: "#111214",
         backgroundImage: "none",
-        border: "1px solid #d1d5db",
-        boxShadow: "none",
+        border: "1px solid rgba(255,255,255,0.10)",
+        boxShadow: "0 4px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03)",
         filter: "none",
         WebkitFilter: "none",
-        backdropFilter: "none",
-        WebkitBackdropFilter: "none",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
       }}
     >
       <div
@@ -43,10 +43,10 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
           width: "calc(50% - 4px)",
           height: "calc(100% - 8px)",
           borderRadius: 9,
-          background: "#ffffff",
+          background: "#202124",
           backgroundImage: "none",
-          border: "1px solid #dbe1e8",
-          boxShadow: "none",
+          border: "1px solid rgba(255,255,255,0.09)",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)",
           filter: "none",
           WebkitFilter: "none",
           backdropFilter: "none",
@@ -72,7 +72,7 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
             }}
             className={`relative z-10 flex items-center justify-center text-[14px] font-semibold transition-[color,background,transform] duration-150 ease-out active:scale-[0.96] rounded-[9px] w-full h-full ${selected ? "dash-segment-btn-active" : "dash-segment-btn-idle"}`}
             style={{
-              color: selected ? "#111827" : "#64748b",
+              color: selected ? "#F5F5F5" : "#8A8F98",
               willChange: "transform",
               touchAction: "manipulation",
               background: "transparent",
