@@ -22,8 +22,6 @@ const TABS: NavTab[] = [
 
 const BAR_H = 62;
 const NAV_H = 76;
-// Keep the footer plane exactly as tall as the navigation shell. Previously this
-// was 112px, which left an unnecessary blank 36px strip above the pill.
 const FOOTER_PLANE_H = NAV_H;
 const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 const NAV_Z = "2147483647";
@@ -58,7 +56,10 @@ export function MobileBottomNav() {
     setImportant("height", `calc(${FOOTER_PLANE_H}px + ${SAFE_BOTTOM})`);
     setImportant("box-sizing", "border-box");
     setImportant("padding", `0 0 ${SAFE_BOTTOM}`);
-    setImportant("background", isLight ? "#f8fafc" : "#05070a");
+    // The area around the pill must be completely transparent so the page
+    // remains visible behind it. Only the rounded navigation pill gets a
+    // background/border.
+    setImportant("background", "transparent");
     setImportant("background-image", "none");
     setImportant("border", "0");
     setImportant("border-radius", "0");
@@ -79,12 +80,11 @@ export function MobileBottomNav() {
     setImportant("transform", "none");
     setImportant("will-change", "auto");
     setImportant("z-index", NAV_Z);
-    setImportant("overflow", "hidden");
-  }, [isLight, hidden]);
+    setImportant("overflow", "visible");
+  }, [hidden]);
 
   if (typeof document === "undefined") return null;
 
-  const shellBg = isLight ? "#f8fafc" : "#05070a";
   const pillBg = isLight ? "#ffffff" : "rgba(5,5,8,0.82)";
   const pillBorder = isLight ? "1px solid #e2e8f0" : "none";
   const pillShadow = isLight ? "none" : "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(0,0,0,0.40)";
@@ -109,7 +109,7 @@ export function MobileBottomNav() {
         height: `calc(${FOOTER_PLANE_H}px + ${SAFE_BOTTOM})`,
         boxSizing: "border-box",
         padding: `0 0 ${SAFE_BOTTOM}`,
-        background: shellBg,
+        background: "transparent",
         backgroundImage: "none",
         border: 0,
         borderRadius: 0,
@@ -128,10 +128,10 @@ export function MobileBottomNav() {
         transform: "none",
         willChange: "auto",
         zIndex: 2147483647,
-        overflow: "hidden",
+        overflow: "visible",
       }}
     >
-      <div className="tj-mobile-nav-shell" style={{ position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: `calc(${NAV_H}px + ${SAFE_BOTTOM})`, minHeight: NAV_H, boxSizing: "border-box", padding: "2px 14px 10px", background: shellBg, boxShadow: "none", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "isolate", contain: "none", transform: "none", overflow: "hidden" }}>
+      <div className="tj-mobile-nav-shell" style={{ position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: `calc(${NAV_H}px + ${SAFE_BOTTOM})`, minHeight: NAV_H, boxSizing: "border-box", padding: "2px 14px 10px", background: "transparent", boxShadow: "none", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "isolate", contain: "none", transform: "none", overflow: "visible" }}>
         <div className="tj-mobile-nav-pill" style={{ height: BAR_H, borderRadius: 9999, padding: 0, width: "100%", background: pillBg, border: pillBorder, boxShadow: pillShadow, position: "relative", overflow: "hidden", display: "flex", boxSizing: "border-box", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "isolate" }}>
           {TABS.map((tab, idx) => {
             const active = idx === visualIdx;
