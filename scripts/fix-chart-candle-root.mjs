@@ -8,14 +8,11 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
 const baseFile = path.join(repoRoot, "artifacts/trading-journal/src/components/charts/CustomChartBase.tsx");
 
-if (!fs.existsSync(baseFile)) {
-  throw new Error(`Chart base file not found: ${baseFile}`);
-}
+if (!fs.existsSync(baseFile)) throw new Error(`Chart base file not found: ${baseFile}`);
 
 let text = fs.readFileSync(baseFile, "utf8");
 let changed = false;
 
-// 1) Never restore an obsolete persisted vertical price range on symbol load.
 const oldScale = `        if (typeof saved.priceMin === "number" && typeof saved.priceMax === "number") {
           activatePanRange({ lo: saved.priceMin, hi: saved.priceMax });
           cs.applyOptions({
@@ -36,21 +33,13 @@ const newScale = `        // Do not restore a persisted manual vertical range fr
             localStorage.setItem(vpKey, JSON.stringify(rawVp));
           }
         } catch { }`;
-if (text.includes(oldScale)) {
-  text = text.replace(oldScale, newScale);
-  changed = true;
-}
+if (text.includes(oldScale)) { text = text.replace(oldScale, newScale); changed = true; }
 
-// 2) Keep 1m candle bodies readable on mobile.
 if (text.includes("minBarSpacing:   4,")) {
-  text = text.replace(
-    "minBarSpacing:   4,",
-    "// Keep mobile 1m candle bodies readable after viewport restoration.\n        minBarSpacing:   6,",
-  );
+  text = text.replace("minBarSpacing:   4,", "// Keep mobile 1m candle bodies readable after viewport restoration.\n        minBarSpacing:   6,");
   changed = true;
 }
 
-// 3) Compare the complete OHLCV dataset so corrected historical candles refresh.
 const oldFresh = `      const lastCached = cached?.[cached.length - 1];
       const lastFresh  = bars[bars.length - 1];
       const sameData   = lastCached && lastFresh &&
@@ -63,38 +52,20 @@ const oldFresh = `      const lastCached = cached?.[cached.length - 1];
       }`;
 const newFresh = `      const sameData = !!cached && cached.length === bars.length && cached.every((c, i) => {
         const f = bars[i];
-        return !!f &&
-          c.time === f.time &&
-          c.open === f.open &&
-          c.high === f.high &&
-          c.low === f.low &&
-          c.close === f.close &&
-          c.volume === f.volume;
+        return !!f && c.time === f.time && c.open === f.open && c.high === f.high &&
+          c.low === f.low && c.close === f.close && c.volume === f.volume;
       });
+      if (!sameData) applyBarArray(bars, sym, iv);`;
+if (text.includes(oldFresh)) { text = text.replace(oldFresh, newFresh); changed = true; }
 
-      if (!sameData) {
-        applyBarArray(bars, sym, iv);
-      }`;
-if (text.includes(oldFresh)) {
-  text = text.replace(oldFresh, newFresh);
-  changed = true;
-}
-
-// 4) Treat Delta quote snapshots as live-price updates, not OHLC trades.
 const oldTick = `        const t = msg as unknown as { symbol?: string; price?: number; volume?: number; timestamp?: number };
         if (!t.symbol || t.symbol !== symRef.current || typeof t.price !== "number") return;`;
 const newTick = `        const t = msg as unknown as {
-          symbol?: string;
-          price?: number;
-          volume?: number;
-          timestamp?: number;
+          symbol?: string; price?: number; volume?: number; timestamp?: number;
           tickType?: "trade" | "quote";
         };
         if (!t.symbol || t.symbol !== symRef.current || typeof t.price !== "number") return;`;
-if (text.includes(oldTick)) {
-  text = text.replace(oldTick, newTick);
-  changed = true;
-}
+if (text.includes(oldTick)) { text = text.replace(oldTick, newTick); changed = true; }
 
 const oldIngest = `        const result = agg.ingest(price, volume, tsSec);
         if (!result) return; // identical consecutive price — skip`;
@@ -116,22 +87,14 @@ const newIngest = `        if (t.tickType === "quote") {
           }
           return;
         }
-
         const result = agg.ingest(price, volume, tsSec);
         if (!result) return; // identical consecutive price — skip`;
-if (text.includes(oldIngest)) {
-  text = text.replace(oldIngest, newIngest);
-  changed = true;
-}
+if (text.includes(oldIngest)) { text = text.replace(oldIngest, newIngest); changed = true; }
 
-// 5) Trendline/two-point drawing must appear immediately on the second tap.
-//    The old flow awaited POST /api/drawings before adding the line to Zustand,
-//    so mobile users saw a noticeable delay while the network request completed.
-//    Render optimistically first, then reconcile the temporary id with the DB row.
+// Trendline/two-point drawing: render optimistically before the network request.
+// Use a token so this build-time script never evaluates the app's `${BASE}` expression.
 const overlayFile = path.join(repoRoot, "artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx");
-if (!fs.existsSync(overlayFile)) {
-  throw new Error(`Drawing overlay file not found: ${overlayFile}`);
-}
+if (!fs.existsSync(overlayFile)) throw new Error(`Drawing overlay file not found: ${overlayFile}`);
 let overlay = fs.readFileSync(overlayFile, "utf8");
 let overlayChanged = false;
 
@@ -150,9 +113,8 @@ const oldSaveDrawing = `  const saveDrawing = async (pts: DrawingPoint[]) => {
     } catch { /* ignore */ }
   };`;
 
-const newSaveDrawing = `  const saveDrawing = async (pts: DrawingPoint[]) => {
-    // Optimistic UI: paint the completed drawing immediately. Network persistence
-    // happens in the background and must never delay the second-tap interaction.
+const newSaveDrawingTemplate = `  const saveDrawing = async (pts: DrawingPoint[]) => {
+    // Optimistic UI: paint the completed drawing immediately; persistence is background-only.
     const tempId = -Math.max(1, Date.now());
     const optimistic: Drawing = {
       id: tempId,
@@ -169,16 +131,14 @@ const newSaveDrawing = `  const saveDrawing = async (pts: DrawingPoint[]) => {
     selectDrawing(tempId);
 
     try {
-      const res = await fetch(\`\${BASE}/api/drawings\`, {
+      const res = await fetch(__BASE_TOKEN__/api/drawings, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),
       });
       if (res.ok) {
         const saved: Drawing = await res.json();
         const current = useDrawingStore.getState().drawings;
-        useDrawingStore.getState().setDrawings(
-          current.map(d => d.id === tempId ? saved : d),
-        );
+        useDrawingStore.getState().setDrawings(current.map(d => d.id === tempId ? saved : d));
         selectDrawing(saved.id);
       } else {
         const current = useDrawingStore.getState().drawings;
@@ -191,12 +151,12 @@ const newSaveDrawing = `  const saveDrawing = async (pts: DrawingPoint[]) => {
       selectDrawing(null);
     }
   };`;
+const newSaveDrawing = newSaveDrawingTemplate.replace("__BASE_TOKEN__", "`${BASE}`");
 
 if (overlay.includes(oldSaveDrawing)) {
   overlay = overlay.replace(oldSaveDrawing, newSaveDrawing);
   overlayChanged = true;
 }
-
 if (overlay.includes("await saveDrawing(")) {
   overlay = overlay.replaceAll("await saveDrawing(", "void saveDrawing(");
   overlayChanged = true;
@@ -206,10 +166,9 @@ if (overlayChanged) {
   fs.writeFileSync(overlayFile, overlay);
   console.log("[chart-fix] Applied immediate optimistic drawing commit to DrawingOverlay.tsx");
 }
-
 if (changed) {
   fs.writeFileSync(baseFile, text);
-  console.log("[chart-fix] Applied crypto 1m OHLC/autoscale/cache repair to CustomChartBase.tsx");
+  console.log("[chart-fix] Applied chart compatibility repair to CustomChartBase.tsx");
 } else {
-  console.log("[chart-fix] Crypto 1m OHLC/autoscale repair already present; no mutation required.");
+  console.log("[chart-fix] Chart compatibility repair already present; no base mutation required.");
 }
