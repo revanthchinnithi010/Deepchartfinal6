@@ -43,6 +43,26 @@ export function MobileBottomNav() {
     if (activeIdx >= 0 && !mobileChartFullscreen) setVisualIdx(activeIdx);
   }, [activeIdx, mobileChartFullscreen]);
 
+  // Mobile browsers can suspend the WebSocket/timer stack while the app is in
+  // the background. When the user returns to an already-open Charts route,
+  // force a complete navigation so CustomChart starts from fresh REST OHLC +
+  // a new live stream instead of resuming a stale in-memory series.
+  useEffect(() => {
+    let wasHidden = false;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        wasHidden = true;
+        return;
+      }
+      if (document.visibilityState === "visible" && wasHidden && location === "/charts") {
+        wasHidden = false;
+        window.location.reload();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [location]);
+
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
@@ -166,7 +186,6 @@ export function MobileBottomNav() {
           filter: "none",
           WebkitFilter: "none",
           backdropFilter: "none",
-          WebkitBackdropFilter: "none",
           isolation: "auto",
           contain: "none",
           transform: "none",
@@ -193,7 +212,6 @@ export function MobileBottomNav() {
             filter: "none",
             WebkitFilter: "none",
             backdropFilter: "none",
-            WebkitBackdropFilter: "none",
             isolation: "auto",
           }}
         >
@@ -205,6 +223,15 @@ export function MobileBottomNav() {
               <Link
                 key={tab.kind === "link" ? tab.href : `action-${idx}`}
                 href={tab.kind === "link" ? tab.href : "/"}
+                onClick={(event) => {
+                  if (tab.kind === "link" && tab.href === "/charts") {
+                    // Do not let the keep-alive Charts page resume stale state.
+                    // A full navigation gives us a new CustomChart instance and
+                    // a clean historical OHLC + WebSocket lifecycle every time.
+                    event.preventDefault();
+                    window.location.assign("/charts");
+                  }
+                }}
                 style={{ flex: 1, display: "flex", textDecoration: "none", WebkitTapHighlightColor: "transparent", outline: "none", position: "relative", zIndex: 10 } as React.CSSProperties}
               >
                 <motion.div
