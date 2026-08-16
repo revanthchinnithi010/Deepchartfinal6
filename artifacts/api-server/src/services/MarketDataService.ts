@@ -81,7 +81,14 @@ export class MarketDataService extends EventEmitter {
 
     const cryptoSymbols = defaultSymbols.filter(isCryptoSymbol);
     for (const symbol of cryptoSymbols) this.bybitProvider.subscribe(symbol);
-    if (cryptoSymbols.length > 0) this.bybitProvider.connect();
+
+    // Start the Bybit socket eagerly, even when the initial symbol list is
+    // empty. The production server restores the persistent watchlist only
+    // after startup, so waiting for defaultSymbols here leaves the Bybit feed
+    // offline during that window and can race with the frontend feed-health
+    // check. The socket is cheap to keep open and later subscriptions are
+    // sent immediately by BybitProvider when symbols are restored/selected.
+    this.bybitProvider.connect();
 
     logger.info(
       { symbols: defaultSymbols, nonCryptoSymbols, cryptoSymbols },
