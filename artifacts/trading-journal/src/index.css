@@ -153,3 +153,127 @@ html.light .lucide-bell,html.light .lucide-bell-ring{color:#475569!important;str
     -webkit-backdrop-filter: none !important;
   }
 }
+
+/* ALERT + MARKETS LIGHT MODE
+   The three mobile flows were using hard-coded dark surfaces while the rest of
+   the app follows html.light. Keep the existing dark theme untouched and only
+   normalize these flows when the light theme is active. */
+
+html.light .alert-modal-sheet,
+html.light .alert-modal-desktop-centering {
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 18px 60px rgba(15,23,42,.12) !important;
+}
+
+html.light .alert-modal-sheet [class*="bg-black"],
+html.light .alert-modal-desktop-centering [class*="bg-black"],
+html.light .alert-modal-sheet [class*="bg-white/"],
+html.light .alert-modal-desktop-centering [class*="bg-white/"] {
+  background-color: #f8fafc !important;
+  background-image: none !important;
+}
+
+html.light .alert-modal-sheet [class*="border-white/"],
+html.light .alert-modal-desktop-centering [class*="border-white/"] {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .alert-modal-sheet [class*="text-white"],
+html.light .alert-modal-desktop-centering [class*="text-white"] {
+  color: #0f172a !important;
+}
+
+html.light .alert-modal-sheet [class*="text-muted-foreground"],
+html.light .alert-modal-desktop-centering [class*="text-muted-foreground"] {
+  color: #64748b !important;
+}
+
+html.light .alert-modal-sheet input,
+html.light .alert-modal-sheet textarea,
+html.light .alert-modal-sheet select,
+html.light .alert-modal-desktop-centering input,
+html.light .alert-modal-desktop-centering textarea,
+html.light .alert-modal-desktop-centering select {
+  color: #0f172a !important;
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  caret-color: #f59e0b !important;
+}
+
+html.light .alert-modal-sheet input::placeholder,
+html.light .alert-modal-sheet textarea::placeholder,
+html.light .alert-modal-desktop-centering input::placeholder,
+html.light .alert-modal-desktop-centering textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* SharedMarketSelector (Markets screen) has hoisted inline dark styles for
+   performance. Attribute selectors let light mode override those values without
+   changing the render architecture or tick-update path. */
+html.light div[style*="color: rgb(226, 232, 240)"][style*="background"] {
+  color: #0f172a !important;
+  background: #ffffff !important;
+}
+html.light div[style*="color: #e2e8f0"][style*="background"] {
+  color: #0f172a !important;
+  background: #ffffff !important;
+}
+
+html.light div[style*="background: rgb(0, 0, 0)"],
+html.light div[style*="background: #000000"] {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light div[style*="background: rgb(9, 11, 14)"],
+html.light div[style*="background: #090b0e"] {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 -8px 48px rgba(15,23,42,.12) !important;
+}
+
+html.light div[style*="color: rgb(226, 232, 240)"],
+html.light div[style*="color: #e2e8f0"],
+html.light span[style*="color: rgb(232, 240, 237)"],
+html.light span[style*="color: #e8f0ed"],
+html.light span[style*="color: rgb(221, 238, 221)"],
+html.light span[style*="color: #ddeedd"] {
+  color: #0f172a !important;
+}
+
+html.light div[style*="rgba(255,255,255"],
+html.light button[style*="rgba(255,255,255"],
+html.light input[style*="rgba(255,255,255"] {
+  background-color: #f8fafc !important;
+}
+
+html.light div[style*="border: 1px solid rgba(255,255,255"],
+html.light button[style*="border: 1px solid rgba(255,255,255"] {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .dash-segment-bar {
+  background: #f1f5f9 !important;
+  border-color: #dbe3ec !important;
+  box-shadow: none !important;
+}
+
+html.light .dash-segment-btn-active {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #dbe3ec !important;
+  box-shadow: 0 2px 8px rgba(15,23,42,.08) !important;
+}
+
+html.light .dash-segment-btn-idle {
+  color: #64748b !important;
+  background: transparent !important;
+}
+
+html.light .dash-segment-btn-idle:hover {
+  color: #0f172a !important;
+  background: #e2e8f0 !important;
+}
