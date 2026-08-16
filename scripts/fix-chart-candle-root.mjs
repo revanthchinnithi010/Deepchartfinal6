@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "url";
+import { fileURLToPath } from "node:url";
 
 // Deterministic compatibility repair for the custom chart. This runs during
 // Railway builds and is intentionally idempotent.
@@ -97,106 +97,6 @@ if (!fs.existsSync(overlayFile)) throw new Error(`Drawing overlay file not found
 let overlay = fs.readFileSync(overlayFile, "utf8");
 let overlayChanged = false;
 
-// ── Selected drawing information tooltip ──────────────────────────────────────
-// Keep this at module scope so it works for mouse and touch selection without
-// changing the chart's existing SVG/canvas pointer-event behaviour.
-if (!overlay.includes("[chart-fix] selected-drawing-info-tooltip")) {
-  const tooltipBlock = `
-
-// [chart-fix] selected-drawing-info-tooltip
-let __drawingTooltip: HTMLDivElement | null = null;
-let __lastDrawingPointer = { x: 0, y: 0 };
-
-function __drawingTooltipHide() {
-  if (__drawingTooltip) __drawingTooltip.style.display = "none";
-}
-
-function __drawingTooltipEsc(value: unknown): string {
-  return String(value ?? "—").replace(/[&<>\"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\\\"": "&quot;", "'": "&#39;" } as Record<string, string>)[ch] ?? ch);
-}
-
-function __drawingTooltipCreate() {
-  if (typeof document === "undefined") return null;
-  if (__drawingTooltip) return __drawingTooltip;
-  const el = document.createElement("div");
-  el.setAttribute("data-chart-drawing-info-tooltip", "true");
-  el.style.cssText = [
-    "position:fixed", "z-index:2147483647", "display:none", "pointer-events:none",
-    "min-width:245px", "max-width:310px", "padding:12px 13px", "border-radius:12px",
-    "border:1px solid rgba(255,255,255,.12)", "background:rgba(14,14,16,.96)",
-    "backdrop-filter:blur(14px)", "-webkit-backdrop-filter:blur(14px)",
-    "box-shadow:0 14px 40px rgba(0,0,0,.42)", "color:#f4f4f5",
-    "font:12px/1.45 Inter,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif",
-  ].join(";");
-  document.body.appendChild(el);
-  __drawingTooltip = el;
-  return el;
-}
-
-function __drawingTooltipFindAlert(d: Drawing) {
-  const alerts = useAlertStore.getState().alerts.filter(a => a.type === "trendline") as TrendlineAlert[];
-  const key = String(d.displayId ?? d.id);
-  return alerts.find(a => String(a.drawingDisplayId ?? "") === key)
-    ?? alerts.find(a => a.symbol === d.symbol && normalizeTimeframe(a.timeframe) === normalizeTimeframe(d.timeframe));
-}
-
-function __drawingTooltipShow(d: Drawing) {
-  if (!d || !["trendline", "extended", "ray"].includes(d.toolType)) return;
-  const el = __drawingTooltipCreate();
-  if (!el) return;
-  const alert = __drawingTooltipFindAlert(d);
-  const triggerText = alert?.status === "triggered" ? "Triggered" : "Not triggered";
-  const alertText = alert ? "Set" : "Not set";
-  const p1 = d.points[0];
-  const p2 = d.points[1];
-  const rows = [
-    ["Alert", alertText],
-    ["Id", d.displayId ?? String(d.id)],
-    ["Trigger", triggerText],
-    ["Symbol", d.symbol],
-    ["Timeframe", d.timeframe],
-    ["Point 1", p1 ? `${new Date(Number(p1.time) * 1000).toLocaleString()}  •  ${Number(p1.price).toFixed(6)}` : "—"],
-    ["Point 2", p2 ? `${new Date(Number(p2.time) * 1000).toLocaleString()}  •  ${Number(p2.price).toFixed(6)}` : "—"],
-    ["Condition", alert?.condition ?? "—"],
-    ["Alert ID", alert?.id ?? "—"],
-    ["Created", d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"],
-    ["Locked", d.isLocked ? "Yes" : "No"],
-    ["Visible", d.isVisible ? "Yes" : "No"],
-  ];
-  el.innerHTML = `<div style="font-weight:700;font-size:13px;margin-bottom:8px">Trendline</div>` + rows.map(([k,v]) =>
-    `<div style="display:flex;gap:12px;justify-content:space-between;border-top:1px solid rgba(255,255,255,.07);padding:5px 0"><span style="color:#9ca3af">${__drawingTooltipEsc(k)}</span><span style="text-align:right;max-width:195px;overflow-wrap:anywhere">${__drawingTooltipEsc(v)}</span></div>`
-  ).join("");
-  el.style.display = "block";
-  const pad = 12;
-  const r = el.getBoundingClientRect();
-  const left = Math.min(Math.max(pad, __lastDrawingPointer.x + 14), Math.max(pad, window.innerWidth - r.width - pad));
-  const top = Math.min(Math.max(pad, __lastDrawingPointer.y + 14), Math.max(pad, window.innerHeight - r.height - pad));
-  el.style.left = `${left}px`;
-  el.style.top = `${top}px`;
-}
-
-if (typeof window !== "undefined") {
-  window.addEventListener("pointerdown", (ev) => {
-    __lastDrawingPointer = { x: ev.clientX, y: ev.clientY };
-    window.setTimeout(() => {
-      const state = useDrawingStore.getState();
-      const selected = state.selectedDrawingId == null ? null : state.drawings.find(d => d.id === state.selectedDrawingId);
-      if (selected) __drawingTooltipShow(selected); else __drawingTooltipHide();
-    }, 0);
-  }, true);
-  useDrawingStore.subscribe((state, previous) => {
-    if (state.selectedDrawingId === previous.selectedDrawingId) return;
-    const selected = state.selectedDrawingId == null ? null : state.drawings.find(d => d.id === state.selectedDrawingId);
-    if (selected) __drawingTooltipShow(selected); else __drawingTooltipHide();
-  });
-}
-`;
-  const marker = "const BASE = import.meta.env.BASE_URL.replace(/\\\/$/, \"\");";
-  if (!overlay.includes(marker)) throw new Error("DrawingOverlay BASE marker not found");
-  overlay = overlay.replace(marker, marker + tooltipBlock);
-  overlayChanged = true;
-}
-
 const saveStart = overlay.indexOf("  const saveDrawing = async (pts: DrawingPoint[]) => {");
 if (saveStart >= 0) {
   const saveEndMarker = "  };";
@@ -251,7 +151,7 @@ if (overlay.includes("await saveDrawing(")) {
 
 if (overlayChanged) {
   fs.writeFileSync(overlayFile, overlay);
-  console.log("[chart-fix] Applied chart selection tooltip + optimistic drawing commit to DrawingOverlay.tsx");
+  console.log("[chart-fix] Applied immediate optimistic drawing commit to DrawingOverlay.tsx");
 }
 if (changed) {
   fs.writeFileSync(baseFile, text);
