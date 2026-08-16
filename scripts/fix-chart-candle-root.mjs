@@ -124,6 +124,92 @@ if (text.includes(oldIngest)) {
   changed = true;
 }
 
+// 5) Trendline/two-point drawing must appear immediately on the second tap.
+//    The old flow awaited POST /api/drawings before adding the line to Zustand,
+//    so mobile users saw a noticeable delay while the network request completed.
+//    Render optimistically first, then reconcile the temporary id with the DB row.
+const overlayFile = path.join(repoRoot, "artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx");
+if (!fs.existsSync(overlayFile)) {
+  throw new Error(`Drawing overlay file not found: ${overlayFile}`);
+}
+let overlay = fs.readFileSync(overlayFile, "utf8");
+let overlayChanged = false;
+
+const oldSaveDrawing = `  const saveDrawing = async (pts: DrawingPoint[]) => {
+    try {
+      const res = await fetch(\`${BASE}/api/drawings\`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),
+      });
+      if (res.ok) {
+        const saved: Drawing = await res.json();
+        addDrawing(saved);
+        // Auto-select the newly placed drawing so the toolbar appears immediately
+        selectDrawing(saved.id);
+      }
+    } catch { /* ignore */ }
+  };`;
+
+const newSaveDrawing = `  const saveDrawing = async (pts: DrawingPoint[]) => {
+    // Optimistic UI: paint the completed drawing immediately. Network persistence
+    // happens in the background and must never delay the second-tap interaction.
+    const tempId = -Math.max(1, Date.now());
+    const optimistic: Drawing = {
+      id: tempId,
+      symbol,
+      timeframe,
+      toolType: activeTool,
+      points: pts,
+      style: activeStyle,
+      isLocked: false,
+      isVisible: true,
+      createdAt: new Date().toISOString(),
+    };
+    addDrawing(optimistic);
+    selectDrawing(tempId);
+
+    try {
+      const res = await fetch(\`${BASE}/api/drawings\`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),
+      });
+      if (res.ok) {
+        const saved: Drawing = await res.json();
+        const current = useDrawingStore.getState().drawings;
+        useDrawingStore.getState().setDrawings(
+          current.map(d => d.id === tempId ? saved : d),
+        );
+        selectDrawing(saved.id);
+      } else {
+        // Remove only the optimistic item if persistence failed.
+        const current = useDrawingStore.getState().drawings;
+        useDrawingStore.getState().setDrawings(current.filter(d => d.id !== tempId));
+        selectDrawing(null);
+      }
+    } catch {
+      const current = useDrawingStore.getState().drawings;
+      useDrawingStore.getState().setDrawings(current.filter(d => d.id !== tempId));
+      selectDrawing(null);
+    }
+  };`;
+
+if (overlay.includes(oldSaveDrawing)) {
+  overlay = overlay.replace(oldSaveDrawing, newSaveDrawing);
+  overlayChanged = true;
+}
+
+// Do not block phase reset/crosshair handling on the persistence request.
+// This applies to both the mobile tap-tap path and the drag/click commit path.
+if (overlay.includes("await saveDrawing(")) {
+  overlay = overlay.replaceAll("await saveDrawing(", "void saveDrawing(");
+  overlayChanged = true;
+}
+
+if (overlayChanged) {
+  fs.writeFileSync(overlayFile, overlay);
+  console.log("[chart-fix] Applied immediate optimistic drawing commit to DrawingOverlay.tsx");
+}
+
 if (changed) {
   fs.writeFileSync(baseFile, text);
   console.log("[chart-fix] Applied crypto 1m OHLC/autoscale/cache repair to CustomChartBase.tsx");
