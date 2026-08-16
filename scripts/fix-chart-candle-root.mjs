@@ -92,28 +92,19 @@ const newIngest = `        if (t.tickType === "quote") {
 if (text.includes(oldIngest)) { text = text.replace(oldIngest, newIngest); changed = true; }
 
 // Trendline/two-point drawing: render optimistically before the network request.
-// Use a token so this build-time script never evaluates the app's `${BASE}` expression.
 const overlayFile = path.join(repoRoot, "artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx");
 if (!fs.existsSync(overlayFile)) throw new Error(`Drawing overlay file not found: ${overlayFile}`);
 let overlay = fs.readFileSync(overlayFile, "utf8");
 let overlayChanged = false;
 
-const oldSaveDrawing = `  const saveDrawing = async (pts: DrawingPoint[]) => {
-    try {
-      const res = await fetch(\`${BASE}/api/drawings\`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),
-      });
-      if (res.ok) {
-        const saved: Drawing = await res.json();
-        addDrawing(saved);
-        // Auto-select the newly placed drawing so the toolbar appears immediately
-        selectDrawing(saved.id);
-      }
-    } catch { /* ignore */ }
-  };`;
+// Avoid embedding ${BASE} in a build-time template literal: find the function by markers.
+const saveStart = overlay.indexOf("  const saveDrawing = async (pts: DrawingPoint[]) => {");
+if (saveStart >= 0) {
+  const saveEndMarker = "  };";
+  const saveEnd = overlay.indexOf(saveEndMarker, saveStart);
+  if (saveEnd < 0) throw new Error("Drawing save function end marker not found");
 
-const newSaveDrawingTemplate = `  const saveDrawing = async (pts: DrawingPoint[]) => {
+  const newSaveDrawingTemplate = `  const saveDrawing = async (pts: DrawingPoint[]) => {
     // Optimistic UI: paint the completed drawing immediately; persistence is background-only.
     const tempId = -Math.max(1, Date.now());
     const optimistic: Drawing = {
@@ -151,12 +142,11 @@ const newSaveDrawingTemplate = `  const saveDrawing = async (pts: DrawingPoint[]
       selectDrawing(null);
     }
   };`;
-const newSaveDrawing = newSaveDrawingTemplate.replace("__BASE_TOKEN__", "`${BASE}`");
-
-if (overlay.includes(oldSaveDrawing)) {
-  overlay = overlay.replace(oldSaveDrawing, newSaveDrawing);
+  const newSaveDrawing = newSaveDrawingTemplate.replace("__BASE_TOKEN__", "`${BASE}`");
+  overlay = overlay.slice(0, saveStart) + newSaveDrawing + overlay.slice(saveEnd + saveEndMarker.length);
   overlayChanged = true;
 }
+
 if (overlay.includes("await saveDrawing(")) {
   overlay = overlay.replaceAll("await saveDrawing(", "void saveDrawing(");
   overlayChanged = true;
