@@ -34,10 +34,13 @@
           if (mode === 'light' || mode === 'dark') {
             light = mode === 'light';
           } else {
-            // No stored preference yet: match the OS/browser preference,
-            // same as ThemeContext's getSystemTheme(), so this guess
-            // never disagrees with what React resolves a moment later.
-            light = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+            // No stored preference yet: default to light, matching
+            // ThemeContext's getInitialMode(). This app's dashboard is
+            // always rendered with light/white surfaces, so following the
+            // OS "system" dark-mode preference here caused the status bar
+            // and bottom nav bar to paint black on devices with system
+            // dark mode on, while the visible content stayed white.
+            light = true;
           }
           var meta = document.querySelector('meta[name="theme-color"]');
           if (light) { html.classList.remove('dark'); html.classList.add('light'); }
