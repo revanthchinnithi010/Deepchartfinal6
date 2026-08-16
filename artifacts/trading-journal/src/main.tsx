@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import "./index.css";
+import "./light-header-wordmark.css";
 import "./lib/drawingFavoritesEnhancer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PinGate } from "./components/PinGate";
