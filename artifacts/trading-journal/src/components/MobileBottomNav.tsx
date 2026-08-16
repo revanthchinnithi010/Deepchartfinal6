@@ -23,6 +23,7 @@ const TABS: NavTab[] = [
 const BAR_H = 62;
 const NAV_H = 76;
 const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
+const NAV_Z = "2147483647";
 
 export function MobileBottomNav() {
   const [location] = useLocation();
@@ -46,10 +47,9 @@ export function MobileBottomNav() {
     if (!host) return;
     const setImportant = (property: string, value: string) => host.style.setProperty(property, value, "important");
 
-    // The legacy :has(.tj-mobile-nav-shell) rules are !important. The portal
-    // deliberately lives under document.body, so Dashboard can no longer be an
-    // ancestor. Inline-important values here also prevent those old rules from
-    // changing the portal host when Dashboard finishes mounting.
+    // This element is portaled directly into document.body. It must be above
+    // every Dashboard/card/compositor layer; z-index 45 allowed elevated card
+    // shadows to paint over the footer during the second loading pass.
     setImportant("position", "fixed");
     setImportant("left", "0");
     setImportant("right", "0");
@@ -73,12 +73,12 @@ export function MobileBottomNav() {
     setImportant("visibility", hidden ? "hidden" : "visible");
     setImportant("pointer-events", hidden ? "none" : "auto");
     setImportant("isolation", "isolate");
-    setImportant("contain", "paint");
+    setImportant("contain", "none");
     setImportant("clip-path", "none");
     setImportant("-webkit-clip-path", "none");
-    setImportant("transform", "translateZ(0)");
+    setImportant("transform", "none");
     setImportant("will-change", "auto");
-    setImportant("z-index", "45");
+    setImportant("z-index", NAV_Z);
     setImportant("overflow", "hidden");
   }, [isLight, hidden]);
 
@@ -123,11 +123,11 @@ export function MobileBottomNav() {
         visibility: hidden ? "hidden" : "visible",
         pointerEvents: hidden ? "none" : "auto",
         isolation: "isolate",
-        contain: "paint",
+        contain: "none",
         clipPath: "none",
-        transform: "translateZ(0)",
+        transform: "none",
         willChange: "auto",
-        zIndex: 45,
+        zIndex: 2147483647,
         overflow: "hidden",
       }}
     >
