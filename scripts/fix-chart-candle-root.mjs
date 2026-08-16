@@ -122,7 +122,7 @@ if (saveStart >= 0) {
     selectDrawing(tempId);
 
     try {
-      const res = await fetch(__BASE_TOKEN__/api/drawings, {
+      const res = await fetch(__BASE_TOKEN__, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),
       });
@@ -142,7 +142,7 @@ if (saveStart >= 0) {
       selectDrawing(null);
     }
   };`;
-  const newSaveDrawing = newSaveDrawingTemplate.replace("__BASE_TOKEN__", "`${BASE}`");
+  const newSaveDrawing = newSaveDrawingTemplate.replace("__BASE_TOKEN__", "`${BASE}/api/drawings`");
   overlay = overlay.slice(0, saveStart) + newSaveDrawing + overlay.slice(saveEnd + saveEndMarker.length);
   overlayChanged = true;
 }
