@@ -21,8 +21,6 @@ const TABS: NavTab[] = [
 ];
 
 const BAR_H = 62;
-const NAV_H = 76;
-const FOOTER_PLANE_H = NAV_H;
 const SAFE_BOTTOM = "env(safe-area-inset-bottom, 0px)";
 const NAV_Z = "2147483647";
 
@@ -53,7 +51,7 @@ export function MobileBottomNav() {
     setImportant("right", "0");
     setImportant("bottom", "0");
     setImportant("width", "100%");
-    setImportant("height", `calc(${FOOTER_PLANE_H}px + ${SAFE_BOTTOM})`);
+    setImportant("height", `calc(${BAR_H}px + ${SAFE_BOTTOM})`);
     setImportant("box-sizing", "border-box");
     setImportant("padding", `0 0 ${SAFE_BOTTOM}`);
     setImportant("background", "transparent");
@@ -85,7 +83,8 @@ export function MobileBottomNav() {
 
   const pillBg = isLight ? "#ffffff" : "rgba(5,5,8,0.82)";
   const pillBorder = isLight ? "1px solid #e2e8f0" : "none";
-  const pillShadow = isLight ? "none" : "inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(0,0,0,0.40)";
+  // No shadow/glow at all. The pill itself is the only visible navigation surface.
+  const pillShadow = "none";
   const activeIconColor = isLight ? "#111827" : "#ffffff";
   const inactiveIconColor = isLight ? "#64748b" : "rgba(148,163,184,0.44)";
   const activeLabelColor = isLight ? "#111827" : "rgba(255,255,255,0.92)";
@@ -104,7 +103,7 @@ export function MobileBottomNav() {
         right: 0,
         bottom: 0,
         width: "100%",
-        height: `calc(${FOOTER_PLANE_H}px + ${SAFE_BOTTOM})`,
+        height: `calc(${BAR_H}px + ${SAFE_BOTTOM})`,
         boxSizing: "border-box",
         padding: `0 0 ${SAFE_BOTTOM}`,
         background: "transparent",
@@ -130,11 +129,8 @@ export function MobileBottomNav() {
         overflow: "visible",
       }}
     >
-      {/* Deliberately not named .tj-mobile-nav-shell: old global compositor CSS
-          targets that class and paints a rectangular footer. The surrounding
-          layer must stay fully transparent; only the pill below is painted. */}
-      <div className="tj-mobile-nav-container" style={{ position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: `calc(${NAV_H}px + ${SAFE_BOTTOM})`, minHeight: NAV_H, boxSizing: "border-box", padding: "2px 14px 10px", background: "transparent", backgroundColor: "transparent", backgroundImage: "none", border: 0, boxShadow: "none", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "auto", contain: "none", transform: "none", overflow: "visible" }}>
-        <div className="tj-mobile-nav-pill" style={{ height: BAR_H, borderRadius: 9999, padding: 0, width: "100%", background: pillBg, backgroundColor: pillBg, backgroundImage: "none", border: pillBorder, boxShadow: pillShadow, position: "relative", overflow: "hidden", display: "flex", boxSizing: "border-box", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "auto" }}>
+      <div className="tj-mobile-nav-container" style={{ position: "absolute", left: 0, right: 0, bottom: SAFE_BOTTOM, width: "100%", height: BAR_H, minHeight: BAR_H, boxSizing: "border-box", padding: 0, background: "transparent", backgroundColor: "transparent", backgroundImage: "none", border: 0, borderRadius: 0, boxShadow: "none", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "auto", contain: "none", transform: "none", overflow: "visible" }}>
+        <div className="tj-mobile-nav-pill" style={{ height: BAR_H, borderRadius: 9999, padding: 0, margin: 0, width: "calc(100% - 28px)", marginLeft: 14, background: pillBg, backgroundColor: pillBg, backgroundImage: "none", border: pillBorder, boxShadow: pillShadow, position: "relative", overflow: "hidden", display: "flex", boxSizing: "border-box", filter: "none", WebkitFilter: "none", backdropFilter: "none", WebkitBackdropFilter: "none", isolation: "auto" }}>
           {TABS.map((tab, idx) => {
             const active = idx === visualIdx;
             const isAlerts = tab.kind === "link" && tab.href === "/alerts";
@@ -144,7 +140,7 @@ export function MobileBottomNav() {
                 <motion.div className="tj-mobile-nav-tab" whileTap={{ scale: 0.97 }} transition={TAP_TRANSITION} style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", userSelect: "none", filter: "none", WebkitFilter: "none" }}>
                   <motion.div animate={{ scale: active ? 1.12 : 1 }} transition={tweenFast} style={{ position: "relative", filter: "none", WebkitFilter: "none" }}>
                     <tab.Icon style={{ width: 22, height: 22, flexShrink: 0, color: active ? activeIconColor : inactiveIconColor, transition: "color 0.22s ease", display: "block", filter: "none" }} />
-                    {badge > 0 && <span style={{ position: "absolute", top: -5, right: -6, minWidth: 14, height: 14, borderRadius: 9999, background: "#ef4444", boxShadow: "0 0 6px rgba(239,68,68,0.55)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff", lineHeight: 1, padding: "0 3px", border: `1.5px solid ${badgeBorder}`, pointerEvents: "none" }}>{badge > 99 ? "99+" : badge}</span>}
+                    {badge > 0 && <span style={{ position: "absolute", top: -5, right: -6, minWidth: 14, height: 14, borderRadius: 9999, background: "#ef4444", boxShadow: "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#fff", lineHeight: 1, padding: "0 3px", border: `1.5px solid ${badgeBorder}`, pointerEvents: "none" }}>{badge > 99 ? "99+" : badge}</span>}
                   </motion.div>
                   <span style={{ fontSize: 10, lineHeight: 1, fontWeight: active ? 600 : 400, color: active ? activeLabelColor : inactiveLabelColor, letterSpacing: active ? "0.04em" : "0.01em", transition: "color 0.22s ease", whiteSpace: "nowrap" }}>{tab.label}</span>
                 </motion.div>
