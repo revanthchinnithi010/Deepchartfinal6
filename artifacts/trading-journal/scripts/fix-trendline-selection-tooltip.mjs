@@ -9,7 +9,6 @@ const file = path.join(repoRoot, "artifacts/trading-journal/src/components/chart
 if (!fs.existsSync(file)) throw new Error(`DrawingOverlay.tsx not found: ${file}`);
 let src = fs.readFileSync(file, "utf8");
 
-// Keep the selected-drawing tooltip, but remove only the fields the user asked to hide.
 if (src.includes("data-chart-drawing-info-tooltip")) {
   src = src.replace(/\n\s*const p1 = d\.points\[0\];\n\s*const p2 = d\.points\[1\];\n\s*const point1Text = p1 \?[^\n]*\n\s*const point2Text = p2 \?[^\n]*\n/, "\n");
   src = src.replace(/\n\s*\[\"Point 1\", point1Text\],\n\s*\[\"Point 2\", point2Text\],/g, "");
@@ -29,34 +28,24 @@ function __findTrendlineAlert(d: Drawing): TrendlineAlert | undefined { const al
 function __showDrawingTooltip(d: Drawing) { if (!d || !["trendline","extended","ray","rect"].includes(d.toolType)) return; const el = __getDrawingTooltip(); if (!el) return; const alert = __findTrendlineAlert(d); const rows: Array<[string,string]> = [["Alert",alert ? "Set" : "Not set"],["Id",String(d.displayId ?? d.id)],["Trigger",alert?.status === "triggered" ? "Triggered" : "Not triggered"],["Symbol",String(d.symbol)],["Timeframe",String(d.timeframe)],["Condition",String(alert?.condition ?? "—")],["Alert ID",String(alert?.id ?? "—")],["Created",d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"]]; const rowHtml = rows.map(([key,value]) => "<div style=\"display:flex;gap:12px;justify-content:space-between;border-top:1px solid rgba(255,255,255,.07);padding:5px 0\"><span style=\"color:#9ca3af\">" + __tooltipEscape(key) + "</span><span style=\"text-align:right;max-width:205px;overflow-wrap:anywhere\">" + __tooltipEscape(value) + "</span></div>").join(""); el.innerHTML = "<div style=\"font-weight:700;font-size:13px;margin-bottom:8px\">" + (d.toolType === "rect" ? "Zone" : "Trendline") + "</div>" + rowHtml; el.style.display = "block"; const pad=12, rect=el.getBoundingClientRect(); const left=Math.min(Math.max(pad,__lastDrawingPointer.x+14),Math.max(pad,window.innerWidth-rect.width-pad)); const top=Math.min(Math.max(pad,__lastDrawingPointer.y+14),Math.max(pad,window.innerHeight-rect.height-pad)); el.style.left=left+"px"; el.style.top=top+"px"; }
 function __refreshDrawingTooltip() { if (typeof document === "undefined") return; if (document.querySelector("[data-drawing-popup]")) { __hideDrawingTooltip(); return; } const state=useDrawingStore.getState(); const selected=state.selectedDrawingId==null?null:state.drawings.find(d=>d.id===state.selectedDrawingId); if(selected)__showDrawingTooltip(selected);else __hideDrawingTooltip(); }
 if (typeof window !== "undefined") {
-  // Selection is committed during pointerdown in the chart. Showing the tooltip
-  // on pointerdown races that state update, so use pointerup + a second frame.
-  window.addEventListener("pointerup", event => {
-    __lastDrawingPointer={x:event.clientX,y:event.clientY};
-    window.requestAnimationFrame(() => window.setTimeout(__refreshDrawingTooltip, 0));
-  }, true);
-  useDrawingStore.subscribe((state,previous)=>{
-    if(state.selectedDrawingId===previous.selectedDrawingId)return;
-    window.requestAnimationFrame(() => window.setTimeout(__refreshDrawingTooltip, 0));
-  });
+  window.addEventListener("pointerup", event => { __lastDrawingPointer={x:event.clientX,y:event.clientY}; window.requestAnimationFrame(() => window.setTimeout(__refreshDrawingTooltip, 0)); }, true);
+  window.addEventListener("pointermove", event => { __lastDrawingPointer={x:event.clientX,y:event.clientY}; if (document.querySelector("[data-drawing-popup], [role=\"dialog\"]")) { __hideDrawingTooltip(); return; } const state=useDrawingStore.getState(); const selected=state.selectedDrawingId==null?null:state.drawings.find(d=>d.id===state.selectedDrawingId); if(selected && ["trendline","extended","ray","rect"].includes(selected.toolType)) __showDrawingTooltip(selected); }, true);
+  useDrawingStore.subscribe((state,previous)=>{ if(state.selectedDrawingId===previous.selectedDrawingId)return; window.requestAnimationFrame(() => window.setTimeout(__refreshDrawingTooltip, 0)); });
 }
 `;
   src = src.replace(marker, marker + block);
 }
 
-// Make an already-selected drawing show its tooltip again when tapped/clicked,
-// while keeping the tooltip hidden whenever the alert modal is open.
-src = src.replace(/window\.addEventListener\("pointerdown", event => \{[\s\S]*?\}, true\);\s*useDrawingStore\.subscribe\(\(state,previous\)=>\{[\s\S]*?\}\);/m, `window.addEventListener("pointerup", event => { __lastDrawingPointer={x:event.clientX,y:event.clientY}; window.requestAnimationFrame(() => window.setTimeout(__refreshDrawingTooltip, 0)); }, true); useDrawingStore.subscribe((state,previous)=>{ if(state.selectedDrawingId===previous.selectedDrawingId)return; window.requestAnimationFrame(() => window.setTimeout(__refreshDrawingTooltip, 0)); });`);
+// Repair older builds that already contain the tooltip listener but still hide it
+// immediately after selection. Replace that listener with the pointerup/pointermove flow.
+src = src.replace(/window\.addEventListener\("pointerdown", event => \{[\s\S]*?\}, true\);\s*useDrawingStore\.subscribe\(\(state,previous\)=>\{[\s\S]*?\}\);/m, `window.addEventListener("pointerup", event => { __lastDrawingPointer={x:event.clientX,y:event.clientY}; window.requestAnimationFrame(() => window.setTimeout(__refreshDrawingTooltip, 0)); }, true); window.addEventListener("pointermove", event => { __lastDrawingPointer={x:event.clientX,y:event.clientY}; if (document.querySelector("[data-drawing-popup], [role=\"dialog\"]")) { __hideDrawingTooltip(); return; } const state=useDrawingStore.getState(); const selected=state.selectedDrawingId==null?null:state.drawings.find(d=>d.id===state.selectedDrawingId); if(selected && ["trendline","extended","ray","rect"].includes(selected.toolType)) __showDrawingTooltip(selected); }, true); useDrawingStore.subscribe((state,previous)=>{ if(state.selectedDrawingId===previous.selectedDrawingId)return; window.requestAnimationFrame(() => window.setTimeout(__refreshDrawingTooltip, 0)); });`);
 
 src = src.replace(/z-index:2147483647/g, "z-index:180");
 
-// The alert icon on a selected drawing must use the chart's existing DrawingAlertModal.
-// Hide the drawing tooltip first so it cannot cover the modal on mobile.
 const wrongAlert = /onAlert=\{\(\) => \{\s*const drawingPayload = \{[\s\S]*?window\.dispatchEvent\(new PopStateEvent\("popstate"\)\);\s*\}\}/;
 src = src.replace(wrongAlert, 'onAlert={() => { __hideDrawingTooltip(); onDrawingAlert?.(d); }}');
 src = src.replace('onAlert={() => { onDrawingAlert?.(d); }}', 'onAlert={() => { __hideDrawingTooltip(); onDrawingAlert?.(d); }}');
 
-// Explicit primary action labels for selected drawing alerts.
 const modalFile = path.join(repoRoot, "artifacts/trading-journal/src/components/charts/DrawingAlertModal.tsx");
 if (fs.existsSync(modalFile)) {
   let modal = fs.readFileSync(modalFile, "utf8");
@@ -65,4 +54,4 @@ if (fs.existsSync(modalFile)) {
 }
 
 fs.writeFileSync(file, src, "utf8");
-console.log("[drawing-fix] Tooltip now refreshes after drawing selection (pointerup + next frame), also works when tapping an already-selected drawing, and stays behind/hidden from alert modal.");
+console.log("[drawing-fix] Restored selected drawing tooltip visibility with pointerup + pointermove and kept it hidden only while alert/modal UI is open.");
