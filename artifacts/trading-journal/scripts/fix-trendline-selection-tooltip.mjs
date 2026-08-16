@@ -8,7 +8,7 @@ const file = path.join(repoRoot, "artifacts/trading-journal/src/components/chart
 if (!fs.existsSync(file)) throw new Error("DrawingOverlay.tsx not found");
 let src = fs.readFileSync(file, "utf8");
 
-// Remove the complete generated block from a previous build, but leave the real source untouched.
+// Remove the generated block from a previous build, but leave the real source untouched.
 src = src.replace(/\n\/\/ \[chart-fix\] Selected drawing information tooltip\.[\s\S]*?(?=\nfunction hexToRgba)/m, "\n");
 
 const marker = 'const BASE = import.meta.env.BASE_URL.replace(/\\/$/, "");';
@@ -80,16 +80,16 @@ function __showDrawingTooltip(d: Drawing) {
     ["Created", d.createdAt ? new Date(d.createdAt).toLocaleString() : "—"]
   ];
   const rowHtml = rows.map(([key, value]) =>
-    `<div style="display:flex;gap:12px;justify-content:space-between;border-top:1px solid rgba(255,255,255,.07);padding:5px 0"><span style="color:#9ca3af">\${__tooltipEscape(key)}</span><span style="text-align:right;max-width:190px;overflow-wrap:anywhere">\${__tooltipEscape(value)}</span></div>`
+    "<div style=\"display:flex;gap:12px;justify-content:space-between;border-top:1px solid rgba(255,255,255,.07);padding:5px 0\"><span style=\"color:#9ca3af\">" + __tooltipEscape(key) + "</span><span style=\"text-align:right;max-width:190px;overflow-wrap:anywhere\">" + __tooltipEscape(value) + "</span></div>"
   ).join("");
-  el.innerHTML = `<div style="font-weight:700;font-size:13px;margin-bottom:8px">\${d.toolType === "rect" ? "Zone" : "Trendline"}</div>\${rowHtml}`;
+  el.innerHTML = "<div style=\"font-weight:700;font-size:13px;margin-bottom:8px\">" + (d.toolType === "rect" ? "Zone" : "Trendline") + "</div>" + rowHtml;
   el.style.display = "block";
   const pad = 10;
   const r = el.getBoundingClientRect();
   const left = Math.min(Math.max(pad, __lastDrawingPointer.x + 16), Math.max(pad, window.innerWidth - r.width - pad));
   const top = Math.min(Math.max(pad, __lastDrawingPointer.y + 16), Math.max(pad, window.innerHeight - r.height - pad));
-  el.style.left = `\${left}px`;
-  el.style.top = `\${top}px`;
+  el.style.left = left + "px";
+  el.style.top = top + "px";
 }
 
 function __refreshDrawingTooltip() {
