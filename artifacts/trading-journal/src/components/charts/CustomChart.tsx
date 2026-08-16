@@ -70,7 +70,7 @@ export default function CustomChart(props: CustomChartProps) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "#07110D",
+            background: "#000000",
             pointerEvents: "auto",
           }}
         >
