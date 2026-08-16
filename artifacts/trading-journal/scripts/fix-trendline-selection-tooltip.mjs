@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(scriptDir, "../..");
+const repoRoot = path.resolve(scriptDir, "../../..");
 const file = path.join(repoRoot, "artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx");
 
 if (!fs.existsSync(file)) throw new Error(`DrawingOverlay.tsx not found: ${file}`);
@@ -69,8 +69,7 @@ function __showDrawingTooltip(d: Drawing) {
   const p1 = d.points[0];
   const p2 = d.points[1];
   const alertSet = Boolean(alert);
-  const triggered = alert?.status === "triggered";
-  const triggerText = triggered ? "Triggered" : "Not triggered";
+  const triggerText = alert?.status === "triggered" ? "Triggered" : "Not triggered";
 
   const rows: Array<[string, string]> = [
     ["Alert", alertSet ? "Set" : "Not set"],
