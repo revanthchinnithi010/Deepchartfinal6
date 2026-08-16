@@ -10,7 +10,7 @@ if (!fs.existsSync(file)) throw new Error(`DrawingOverlay.tsx not found: ${file}
 
 let src = fs.readFileSync(file, "utf8");
 if (src.includes("data-chart-drawing-info-tooltip")) {
-  console.log("[trendline-tooltip] Already installed; no changes required.");
+  console.log("[drawing-tooltip] Already installed; no changes required.");
   process.exit(0);
 }
 
@@ -19,7 +19,7 @@ if (!src.includes(marker)) throw new Error("DrawingOverlay BASE marker not found
 
 const block = String.raw`
 
-// [chart-fix] Selected trendline information tooltip.
+// [chart-fix] Selected drawing information tooltip.
 let __drawingTooltip: HTMLDivElement | null = null;
 let __lastDrawingPointer = { x: 0, y: 0 };
 
@@ -59,7 +59,7 @@ function __findTrendlineAlert(d: Drawing): TrendlineAlert | undefined {
 }
 
 function __showDrawingTooltip(d: Drawing) {
-  if (!d || !["trendline", "extended", "ray"].includes(d.toolType)) return;
+  if (!d || !["trendline", "extended", "ray", "rect"].includes(d.toolType)) return;
   const el = __getDrawingTooltip();
   if (!el) return;
 
@@ -87,7 +87,8 @@ function __showDrawingTooltip(d: Drawing) {
     __tooltipEscape(key) + "</span><span style=\"text-align:right;max-width:205px;overflow-wrap:anywhere\">" +
     __tooltipEscape(value) + "</span></div>"
   ).join("");
-  el.innerHTML = "<div style=\"font-weight:700;font-size:13px;margin-bottom:8px\">Trendline</div>" + rowHtml;
+  const title = d.toolType === "rect" ? "Rectangle" : "Trendline";
+  el.innerHTML = "<div style=\"font-weight:700;font-size:13px;margin-bottom:8px\">" + title + "</div>" + rowHtml;
   el.style.display = "block";
 
   const pad = 12;
@@ -117,4 +118,4 @@ if (typeof window !== "undefined") {
 
 src = src.replace(marker, marker + block);
 fs.writeFileSync(file, src);
-console.log("[trendline-tooltip] Installed selected trendline info tooltip.");
+console.log("[drawing-tooltip] Installed selected trendline + rectangle info tooltip.");
