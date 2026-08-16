@@ -169,7 +169,7 @@ const newSaveDrawing = `  const saveDrawing = async (pts: DrawingPoint[]) => {
     selectDrawing(tempId);
 
     try {
-      const res = await fetch(\`${BASE}/api/drawings\`, {
+      const res = await fetch(\`\${BASE}/api/drawings\`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),
       });
@@ -181,7 +181,6 @@ const newSaveDrawing = `  const saveDrawing = async (pts: DrawingPoint[]) => {
         );
         selectDrawing(saved.id);
       } else {
-        // Remove only the optimistic item if persistence failed.
         const current = useDrawingStore.getState().drawings;
         useDrawingStore.getState().setDrawings(current.filter(d => d.id !== tempId));
         selectDrawing(null);
@@ -198,8 +197,6 @@ if (overlay.includes(oldSaveDrawing)) {
   overlayChanged = true;
 }
 
-// Do not block phase reset/crosshair handling on the persistence request.
-// This applies to both the mobile tap-tap path and the drag/click commit path.
 if (overlay.includes("await saveDrawing(")) {
   overlay = overlay.replaceAll("await saveDrawing(", "void saveDrawing(");
   overlayChanged = true;
