@@ -35,7 +35,13 @@ function getInitialMode(): ThemeMode {
     const legacy = localStorage.getItem("tj-theme") as Theme | null;
     if (legacy === "light" || legacy === "dark") return legacy;
   } catch {}
-  return "system";
+  // No stored preference: default to light regardless of the device/browser's
+  // OS-level dark-mode setting. This app's dashboard is always rendered with
+  // light/white surfaces, so following "system" caused the resolved theme to
+  // read "dark" on devices with system dark mode on — which painted the
+  // status bar and bottom nav bar black while the visible content stayed
+  // white. Defaulting to "light" keeps chrome color and content in sync.
+  return "light";
 }
 
 function resolveTheme(mode: ThemeMode): Theme {
