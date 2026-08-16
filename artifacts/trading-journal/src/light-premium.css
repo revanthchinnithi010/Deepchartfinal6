@@ -213,6 +213,29 @@
 .light .text-red-400,
 .light .text-red-500 { color: #DC2626 !important; }
 
+/*
+ * FINAL MOBILE NAV COMPOSITOR GUARD
+ *
+ * The dashboard cards use real elevation shadows. During the second loading
+ * phase those shadows can extend outside their card and, on Android Chrome,
+ * be composited close to the fixed bottom-nav layer. The nav itself has no
+ * shadow; give its opaque light surface a same-colour paint buffer so card
+ * shadows cannot visually bleed around the footer edge. This is deliberately
+ * the page background colour, so the buffer is invisible to the user.
+ */
+@media (max-width:768px) {
+  html.light .tj-mobile-nav-host {
+    box-shadow: 0 0 0 32px #f8fafc !important;
+    -webkit-box-shadow: 0 0 0 32px #f8fafc !important;
+  }
+
+  html.light .tj-mobile-nav-host,
+  html.light .tj-mobile-nav-host * {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .light .dash-account-card { transition: none !important; }
 }
