@@ -1,0 +1,58 @@
+name: Patch new candle latency
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Apply realtime candle latency fix
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('artifacts/trading-journal/src/components/charts/CustomChart.tsx')
+          s = p.read_text()
+
+          old = '''const scheduleChartUpdate = useCallback(() => {\n    // Sheet drag lock: suppress chart canvas repaint while a BottomSheet is being'''
+          new = '''const scheduleChartUpdate = useCallback((forceImmediate = false) => {\n    // Sheet drag lock: suppress chart canvas repaint while a BottomSheet is being'''
+          if old not in s:
+              raise SystemExit('scheduleChartUpdate signature anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''    // 30 fps cap on touch devices: skip if last render was < 33 ms ago\n    if (isTouchDeviceRef.current) {\n      const elapsed = performance.now() - lastRenderMsRef.current;\n      if (elapsed < 33) return; // will be re-triggered by the next incoming tick\n    }'''
+          new = '''    // Keep the normal 30 fps touch cap for continuous ticks, but NEVER delay\n    // the first tick of a newly opened candle. That boundary event must render\n    // on the next animation frame so the new candle appears immediately.\n    if (!forceImmediate && isTouchDeviceRef.current) {\n      const elapsed = performance.now() - lastRenderMsRef.current;\n      if (elapsed < 33) return; // continuous tick rendering remains capped\n    }'''
+          if old not in s:
+              raise SystemExit('touch cap anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''        const result = agg.ingest(price, volume, tsSec);\n        if (!result) return; // identical consecutive price — skip\n\n        const { bar } = result;'''
+          new = '''        const result = agg.ingest(price, volume, tsSec);\n        if (!result) return; // identical consecutive price — skip\n\n        const { bar, isNewBar } = result;'''
+          if old not in s:
+              raise SystemExit('aggregator result anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '''        pendingChartBarRef.current = bar;\n        scheduleChartUpdate();\n\n        // ── Auto-follow for tick-driven new-bar events'''
+          new = '''        pendingChartBarRef.current = bar;\n\n        // Commit the new candle to the local ring immediately. The client tick\n        // path is authoritative for the opening tick; waiting for the server's\n        // candle_update would add an unnecessary network/event-loop delay.\n        if (isNewBar) {\n          const stored = barsRef.current;\n          const last = stored[stored.length - 1];\n          if (!last || bar.time > last.time) {\n            stored.push(bar);\n            if (stored.length > 6000) stored.shift();\n            oldestBarTimeRef.current ??= stored[0]?.time ?? bar.time;\n          }\n        }\n\n        // Boundary events bypass the touch-device 30 fps cap so the new candle\n        // is painted on the very next frame. Continuous ticks keep the cap.\n        scheduleChartUpdate(isNewBar);\n\n        // ── Auto-follow for tick-driven new-bar events'''
+          if old not in s:
+              raise SystemExit('tick schedule anchor not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+      - name: Commit patch and remove temporary workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add artifacts/trading-journal/src/components/charts/CustomChart.tsx
+          git rm .github/workflows/patch-new-candle-latency.yml
+          git commit -m "fix: render new candles immediately on boundary tick"
+          git push
