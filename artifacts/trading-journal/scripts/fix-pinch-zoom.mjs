@@ -39,7 +39,7 @@ const next = `      const currentBars = Math.max(0.000001, (range.to as number) 
 
       // ── Anchor: keep the midpoint under the fingers fixed ────────────────
       const rect   = container.getBoundingClientRect();
-      const midX   = ((t0.clientX + t1.clientX) / 2) - rect.left;
+      const midX   = ((t0.clientX + t1.clientY) / 2) - rect.left;
       const anchor = ch.timeScale().coordinateToLogical(midX)
                      ?? (((range.from as number) + (range.to as number)) / 2);
 
@@ -53,10 +53,19 @@ if (s.includes(old)) {
   s = s.replace(old, next);
 }
 
+// Dragging left on the time axis must zoom out (show more historical candles).
+// The previous positive exponent did the opposite and quickly hit the zoom-in
+// boundary, making the left side appear stuck.
+s = s.replace(
+  /const newBars\s*=\s*startBars \* Math\.pow\(2, totalDx \/ \(w \* 0\.2\)\);\n\s*const safeBars\s*=\s*Math\.max\(3, Math\.min\(500_000, newBars\));\n\s*try \{\n\s*ch\.timeScale\(\)\.setVisibleLogicalRange\(\{ from: toEdge - safeBars, to: toEdge \}\);/,
+  `const newBars   = startBars * Math.pow(2, -totalDx / (w * 0.2));
+        const safeBars  = Math.max(1, Math.min(2_000_000, newBars));
+        try {
+          ch.timeScale().setVisibleLogicalRange({ from: toEdge - safeBars, to: toEdge });`
+);
+
 // The previous minBarSpacing=4 was itself a hard zoom-out boundary on mobile.
-// Use a very small spacing so pinch zoom can continue without LWC forcing the
-// logical range to another position at the boundary.
 s = s.replace(/minBarSpacing:\s*4\b/g, "minBarSpacing: 0.01");
 
 fs.writeFileSync(file, s);
-console.log("[pinch-fix] Unlimited pinch zoom + no min-spacing boundary");
+console.log("[pinch-fix] Unlimited pinch zoom + corrected horizontal zoom direction");
