@@ -145,63 +145,18 @@ fs.writeFileSync(file, text);
 console.log("[chart-fix] Applied full-OHLC refresh + clean autoscale + trade-only Delta candle input");
 
 // ── Instant mobile drawing creation ─────────────────────────────────────────
-// DrawingOverlay previously awaited POST /api/drawings before adding the line
-// to Zustand. On mobile the second tap therefore appeared to do nothing until
-// the network request completed. Patch the build artifact source optimistically:
-// render immediately, persist in the background, then reconcile the temporary id.
+// Keep this patch in the build script so the production source remains stable,
+// but use ordinary string literals for the source snippets. This avoids Node
+// evaluating the target React template expression such as ${BASE} at build time.
 const overlayFile = path.join(repoRoot, "artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx");
 if (!fs.existsSync(overlayFile)) throw new Error(`Drawing overlay file not found: ${overlayFile}`);
 
 let overlay = fs.readFileSync(overlayFile, "utf8");
 let overlayChanged = false;
 
-const oldSaveDrawing = `  const saveDrawing = async (pts: DrawingPoint[]) => {
-    try {
-      const res = await fetch(\`${BASE}/api/drawings\`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),
-      });
-      if (res.ok) {
-        const saved: Drawing = await res.json();
-        addDrawing(saved);
-        // Auto-select the newly placed drawing so the toolbar appears immediately
-        selectDrawing(saved.id);
-      }
-    } catch { /* ignore */ }
-  };`;
+const oldSaveDrawing = '  const saveDrawing = async (pts: DrawingPoint[]) => {\n    try {\n      const res = await fetch(`${BASE}/api/drawings`, {\n        method: "POST", headers: { "Content-Type": "application/json" },\n        body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),\n      });\n      if (res.ok) {\n        const saved: Drawing = await res.json();\n        addDrawing(saved);\n        // Auto-select the newly placed drawing so the toolbar appears immediately\n        selectDrawing(saved.id);\n      }\n    } catch { /* ignore */ }\n  };';
 
-const newSaveDrawing = `  const saveDrawing = async (pts: DrawingPoint[]) => {
-    // OPTIMISTIC: render immediately; never block the second-point tap on network I/O.
-    const tempId = -Math.max(1, Date.now());
-    const optimistic: Drawing = {
-      id: tempId, symbol, timeframe, toolType: activeTool, points: pts,
-      style: activeStyle, isLocked: false, isVisible: true,
-      createdAt: new Date().toISOString(),
-    };
-    addDrawing(optimistic);
-    selectDrawing(tempId);
-
-    try {
-      const res = await fetch(\`${BASE}/api/drawings\`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),
-      });
-      if (res.ok) {
-        const saved: Drawing = await res.json();
-        const current = useDrawingStore.getState().drawings;
-        useDrawingStore.getState().setDrawings(current.map(d => d.id === tempId ? saved : d));
-        selectDrawing(saved.id);
-      } else {
-        const current = useDrawingStore.getState().drawings;
-        useDrawingStore.getState().setDrawings(current.filter(d => d.id !== tempId));
-        selectDrawing(null);
-      }
-    } catch {
-      const current = useDrawingStore.getState().drawings;
-      useDrawingStore.getState().setDrawings(current.filter(d => d.id !== tempId));
-      selectDrawing(null);
-    }
-  };`;
+const newSaveDrawing = '  const saveDrawing = async (pts: DrawingPoint[]) => {\n    // OPTIMISTIC: render immediately; never block the second-point tap on network I/O.\n    const tempId = -Math.max(1, Date.now());\n    const optimistic: Drawing = {\n      id: tempId, symbol, timeframe, toolType: activeTool, points: pts,\n      style: activeStyle, isLocked: false, isVisible: true,\n      createdAt: new Date().toISOString(),\n    };\n    addDrawing(optimistic);\n    selectDrawing(tempId);\n\n    try {\n      const res = await fetch(`${BASE}/api/drawings`, {\n        method: "POST", headers: { "Content-Type": "application/json" },\n        body: JSON.stringify({ symbol, timeframe, toolType: activeTool, points: pts, style: activeStyle }),\n      });\n      if (res.ok) {\n        const saved: Drawing = await res.json();\n        const current = useDrawingStore.getState().drawings;\n        useDrawingStore.getState().setDrawings(current.map(d => d.id === tempId ? saved : d));\n        selectDrawing(saved.id);\n      } else {\n        const current = useDrawingStore.getState().drawings;\n        useDrawingStore.getState().setDrawings(current.filter(d => d.id !== tempId));\n        selectDrawing(null);\n      }\n    } catch {\n      const current = useDrawingStore.getState().drawings;\n      useDrawingStore.getState().setDrawings(current.filter(d => d.id !== tempId));\n      selectDrawing(null);\n    }\n  };';
 
 if (overlay.includes(oldSaveDrawing)) {
   overlay = overlay.replace(oldSaveDrawing, newSaveDrawing);
