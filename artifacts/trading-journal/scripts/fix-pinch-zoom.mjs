@@ -6,66 +6,48 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const file = path.resolve(here, "../src/components/charts/CustomChart.tsx");
 let s = fs.readFileSync(file, "utf8");
 
-const old = `      const currentBars = (range.to as number) - (range.from as number);
-      const ratio       = prevSpan / span;
-      const newBars     = Math.max(3, Math.min(500_000, currentBars * ratio));
-
-      // ── Zoom limit guard ─────────────────────────────────────────────────
-      // If newBars equals currentBars the clamp absorbed the entire gesture
-      // (already at min or max zoom). Skip setVisibleLogicalRange completely —
-      // even though newBars didn't change, the anchor-midpoint calculation
-      // below can produce a slightly different newFrom, which manifests as
-      // unwanted horizontal drift when pinching at the zoom boundary.
-      if (newBars === currentBars) return;
-
-      // ── Anchor: live midpoint of the two fingers in logical bar space ─────
-      const rect   = container.getBoundingClientRect();
-      const midX   = ((t0.clientX + t1.clientX) / 2) - rect.left;
-      const anchor = ch.timeScale().coordinateToLogical(midX)
-                     ?? (((range.from as number) + (range.to as number)) / 2);
-
-      const leftFrac = (anchor - (range.from as number)) / currentBars;
-      const newFrom  = anchor - newBars * leftFrac;
-      const newTo    = newFrom + newBars;`;
-
-const next = `      const currentBars = Math.max(0.000001, (range.to as number) - (range.from as number));
-      const ratio       = prevSpan / span;
+// ── 1) Unlimited pinch zoom ─────────────────────────────────────────────────
+// Remove every artificial logical-bar min/max. The only practical limits are
+// the browser/LWC floating-point range and the amount of history the API can
+// actually provide. Keep the finger midpoint anchored so the chart expands
+// from the user's pinch point instead of drifting horizontally.
+const pinchBlock = /const currentBars = \(range\.to as number\) - \(range\.from as number\);[\s\S]*?const newTo\s*=\s*newFrom \+ newBars;/;
+const pinchReplacement = `const currentBars = Math.max(Number.EPSILON, (range.to as number) - (range.from as number));
+      const ratio = prevSpan / span;
       if (!Number.isFinite(ratio) || ratio <= 0) return;
 
-      // No artificial min/max zoom. Keep the logical range proportional to
-      // the finger span instead of clamping it at a zoom boundary.
+      // No artificial zoom-out ceiling. Pinching inward can keep increasing the
+      // logical range for as long as the user continues the gesture.
       const newBars = currentBars * ratio;
       if (!Number.isFinite(newBars) || newBars <= 0) return;
 
-      // ── Anchor: keep the midpoint under the fingers fixed ────────────────
-      const rect   = container.getBoundingClientRect();
-      const midX   = ((t0.clientX + t1.clientX) / 2) - rect.left;
+      const rect = container.getBoundingClientRect();
+      const midX = ((t0.clientX + t1.clientX) / 2) - rect.left;
       const anchor = ch.timeScale().coordinateToLogical(midX)
-                     ?? (((range.from as number) + (range.to as number)) / 2);
-
-      // Preserve the finger anchor exactly. This prevents horizontal drift
-      // when the range becomes wider than the loaded candle set.
+        ?? (((range.from as number) + (range.to as number)) / 2);
       const anchorFrac = (anchor - (range.from as number)) / currentBars;
-      const newFrom  = anchor - newBars * anchorFrac;
-      const newTo    = newFrom + newBars;`;
+      const newFrom = anchor - newBars * anchorFrac;
+      const newTo = newFrom + newBars;`;
+if (pinchBlock.test(s)) s = s.replace(pinchBlock, pinchReplacement);
 
-if (s.includes(old)) {
-  s = s.replace(old, next);
-}
-
-// Dragging left on the time axis must zoom out (show more historical candles).
-// The previous positive exponent did the opposite and quickly hit the zoom-in
-// boundary, making the left side appear stuck.
+// ── 2) Remove the time-scale zoom-out ceiling ────────────────────────────────
+// Dragging the time axis left must continue exposing older candles. Do not
+// clamp the range to 500k/2m bars.
 s = s.replace(
-  /const newBars\s*=\s*startBars \* Math\.pow\(2, totalDx \/ \(w \* 0\.2\)\);\n\s*const safeBars\s*=\s*Math\.max\(3, Math\.min\(500_000, newBars\));\n\s*try \{\n\s*ch\.timeScale\(\)\.setVisibleLogicalRange\(\{ from: toEdge - safeBars, to: toEdge \}\);/,
-  `const newBars   = startBars * Math.pow(2, -totalDx / (w * 0.2));
-        const safeBars  = Math.max(1, Math.min(2_000_000, newBars));
+  /const newBars\s*=\s*startBars \* Math\.pow\(2,\s*-?totalDx \/ \(w \* 0\.2\)\);\n\s*const safeBars\s*=\s*Math\.max\([^\n]+\);\n\s*try \{\n\s*ch\.timeScale\(\)\.setVisibleLogicalRange\(\{ from: toEdge - safeBars, to: toEdge \}\);/,
+  `const newBars = startBars * Math.pow(2, -totalDx / (w * 0.2));
+        if (!Number.isFinite(newBars) || newBars <= 0) return;
         try {
-          ch.timeScale().setVisibleLogicalRange({ from: toEdge - safeBars, to: toEdge });`
+          ch.timeScale().setVisibleLogicalRange({ from: toEdge - newBars, to: toEdge });`
 );
 
-// The previous minBarSpacing=4 was itself a hard zoom-out boundary on mobile.
+// ── 3) Never let minBarSpacing stop zoom-out ─────────────────────────────────
 s = s.replace(/minBarSpacing:\s*4\b/g, "minBarSpacing: 0.01");
+s = s.replace(/minBarSpacing:\s*\d+(?:\.\d+)?\b/g, "minBarSpacing: 0.01");
+
+// ── 4) Do not stop history at an arbitrary 10,000-bar ceiling ───────────────
+s = s.replace(/const MAX_TOTAL_BARS\s*=\s*10_000;/, "const MAX_TOTAL_BARS = Number.POSITIVE_INFINITY;");
+s = s.replace(/if \(merged\.length >= MAX_TOTAL_BARS\) hasMoreHistoryRef\.current = false;/, "if (merged.length >= MAX_TOTAL_BARS) hasMoreHistoryRef.current = false;");
 
 fs.writeFileSync(file, s);
-console.log("[pinch-fix] Unlimited pinch zoom + corrected horizontal zoom direction");
+console.log("[zoom-fix] unlimited pinch/time zoom + unlimited history ceiling removed");
