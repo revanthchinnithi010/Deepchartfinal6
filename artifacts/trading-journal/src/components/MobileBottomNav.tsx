@@ -86,13 +86,7 @@ export function MobileBottomNav() {
 
   return createPortal(
     <>
-      {chartLoading && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 2147483647, background: isLight ? "#f8fafc" : "#000000", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
-          <Loader2 style={{ width: 34, height: 34, color: isLight ? "#111827" : "#ffffff", animation: "spin 0.8s linear infinite" }} />
-          <span style={{ color: isLight ? "#111827" : "rgba(255,255,255,0.78)", fontSize: 12, fontWeight: 600 }}>Loading Charts…</span>
-        </div>
-      )}
-      <div ref={hostRef} className="tj-mobile-nav-host" data-theme={isLight ? "light" : "dark"} aria-hidden={hidden} style={{ position: "fixed", left: 0, right: 0, bottom: 0, width: "100%", height: `calc(${BAR_H}px + ${SAFE_BOTTOM})`, boxSizing: "border-box", padding: `0 0 ${SAFE_BOTTOM}`, background: "transparent", opacity: hidden ? 0 : 1, visibility: hidden ? "hidden" : "visible", pointerEvents: hidden ? "none" : "auto", zIndex: 2147483647, overflow: "visible" }}>
+      <div ref={hostRef} className="tj-mobile-nav-host" data-theme={isLight ? "light" : "dark"} aria-hidden={hidden} style={{ position: "fixed", left: 0, right: 0, bottom: 0, width: "100%", height: `calc(${BAR_H}px + ${SAFE_BOTTOM})`, boxSizing: "border-box", padding: `0 0 ${SAFE_BOTTOM}`, background: "transparent", opacity: hidden ? 0 : 1, visibility: hidden ? "hidden" : "visible", pointerEvents: hidden ? "none" : "auto", zIndex: 2147483646, overflow: "visible" }}>
         <div className="tj-mobile-nav-container" style={{ position: "absolute", left: 0, right: 0, bottom: SAFE_BOTTOM, width: "100%", height: BAR_H, boxSizing: "border-box", background: barBg, borderTop: barBorder }}>
           <div className="tj-mobile-nav-pill" style={{ height: BAR_H, width: "100%", background: barBg, display: "flex", overflow: "hidden" }}>
             {TABS.map((tab, idx) => {
@@ -114,6 +108,12 @@ export function MobileBottomNav() {
           </div>
         </div>
       </div>
+      {chartLoading && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 2147483647, background: isLight ? "#f8fafc" : "#000000", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
+          <Loader2 style={{ width: 34, height: 34, color: isLight ? "#111827" : "#ffffff", animation: "spin 0.8s linear infinite" }} />
+          <span style={{ color: isLight ? "#111827" : "rgba(255,255,255,0.78)", fontSize: 12, fontWeight: 600 }}>Loading Charts…</span>
+        </div>
+      )}
     </>,
     document.body,
   );
