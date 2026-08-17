@@ -1,21 +1,15 @@
 /**
  * In-memory candle cache.
  *
- * Historical OHLC is authoritative. The chart must never restore a cached
- * candle set when a chart instance is opened/reopened because the realtime
- * stream may have advanced while the previous chart instance was gone.
- * CustomChart therefore treats this cache as disabled for initial chart data;
- * every fresh chart instance loads authoritative REST OHLC first and then
- * seeds the realtime aggregator from the returned last candle.
+ * Historical OHLC must never stay stale long enough to hide an authoritative
+ * Delta refresh. The cache is intentionally short-lived: it is only a fast
+ * paint aid while the REST candle request is made in the background.
  */
 
 import type { OHLCBar } from "@/store/chartStore";
 
 const MAX_ENTRIES = 12;
-// Intentionally disabled for chart data correctness. A chart reopen must start
-// from the authoritative REST candle set, matching TradingView's historical →
-// realtime synchronization model rather than painting stale local candles first.
-const CACHE_TTL_MS = 0;
+const CACHE_TTL_MS = 2_000;
 const VIEWPORT_PREFIX = "tv_vp_v2_";
 
 interface CacheEntry {
@@ -34,9 +28,7 @@ export function getCachedCandles(sym: string, iv: string): OHLCBar[] | null {
   const entry = cache.get(k);
   if (!entry) return null;
 
-  // CACHE_TTL_MS is deliberately 0: never use a previous chart's candles as
-  // the initial source of truth after navigation/reopen/background recovery.
-  if (CACHE_TTL_MS <= 0 || Date.now() - entry.ts > CACHE_TTL_MS) {
+  if (Date.now() - entry.ts > CACHE_TTL_MS) {
     cache.delete(k);
     return null;
   }

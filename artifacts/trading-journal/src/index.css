@@ -9,271 +9,91 @@
   gap: 8px !important;
   width: 100%;
 }
+
 .alert-modal-sheet div.flex.gap-2:has(> button[class*="capitalize"]) > button,
-.alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]) > button { width:100%!important; min-width:0!important; min-height:54px!important; padding:8px 6px!important; border-radius:14px!important; border-color:rgba(255,255,255,.10)!important; background:rgba(255,255,255,.025)!important; color:rgba(226,232,240,.68)!important; line-height:1.15!important; white-space:normal!important; text-align:center!important; box-shadow:inset 0 1px 0 rgba(255,255,255,.025); transition:transform .16s ease,background .16s ease,border-color .16s ease,color .16s ease; }
+.alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]) > button {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 54px !important;
+  padding: 8px 6px !important;
+  border-radius: 14px !important;
+  border-color: rgba(255,255,255,.10) !important;
+  background: rgba(255,255,255,.025) !important;
+  color: rgba(226,232,240,.68) !important;
+  line-height: 1.15 !important;
+  white-space: normal !important;
+  text-align: center !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+  transition: transform .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
+}
+
 .alert-modal-sheet div.flex.gap-2:has(> button[class*="capitalize"]) > button:hover,
-.alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]) > button:hover { background:rgba(255,255,255,.055)!important; border-color:rgba(255,255,255,.18)!important; color:#fff!important; transform:translateY(-1px); }
+.alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]) > button:hover {
+  background: rgba(255,255,255,.055) !important;
+  border-color: rgba(255,255,255,.18) !important;
+  color: #fff !important;
+  transform: translateY(-1px);
+}
+
 .alert-modal-sheet div.flex.gap-2:has(> button[class*="capitalize"]) > button[class*="bg-primary"],
-.alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]) > button[class*="bg-primary"] { background:rgba(255,255,255,.95)!important; border-color:rgba(255,255,255,.95)!important; color:#111!important; box-shadow:0 6px 20px rgba(255,255,255,.10),inset 0 1px 0 rgba(255,255,255,.8); }
-@media (max-width:380px){.alert-modal-sheet div.flex.gap-2:has(> button[class*="capitalize"]),.alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]){grid-template-columns:repeat(2,minmax(0,1fr));}}
-
-/* Mobile chart tools */
-@media (max-width:768px){
-.tj-ctrl-bar-inner button:has(> svg.lucide-pencil){flex:0 0 44px!important;width:44px!important;min-width:44px!important;max-width:44px!important;height:40px!important;padding:0!important;margin:0!important;gap:0!important;box-sizing:border-box!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;background:#fff!important;color:#000!important;border-color:#fff!important;box-shadow:none!important;text-shadow:none!important;}
-.tj-ctrl-bar-inner button:has(> svg.lucide-pencil) svg{width:18px!important;height:18px!important;flex:0 0 18px!important;color:#000!important;stroke:#000!important;filter:none!important;margin:0!important;}
-.tj-ctrl-bar-inner button:has(> svg.lucide-pencil) span,.tj-ctrl-bar-inner button:has(> svg.lucide-pencil) .sr-only{display:none!important;}
-.tj-ctrl-bar-inner button:has(> svg.lucide-pencil):hover,.tj-ctrl-bar-inner button:has(> svg.lucide-pencil):active,.tj-ctrl-bar-inner button:has(> svg.lucide-pencil):focus{background:#fff!important;color:#000!important;border-color:#fff!important;box-shadow:none!important;filter:none!important;}
+.alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]) > button[class*="bg-primary"] {
+  background: rgba(255,255,255,.95) !important;
+  border-color: rgba(255,255,255,.95) !important;
+  color: #111 !important;
+  box-shadow: 0 6px 20px rgba(255,255,255,.10), inset 0 1px 0 rgba(255,255,255,.8);
 }
 
-/* Mobile bottom navigation — light mode */
-@media (max-width:768px){
-html.light .tj-cnav-entrance,
-html.light .tj-cnav-entrance * { box-shadow:none!important; filter:none!important; background-image:none!important; text-shadow:none!important; mix-blend-mode:normal!important; }
-html.light .tj-cnav-entrance,
-html.light .tj-cnav-entrance::before,
-html.light .tj-cnav-entrance::after { background:#f8fafc!important; background-image:none!important; box-shadow:none!important; filter:none!important; opacity:1!important; -webkit-mask-image:none!important; mask-image:none!important; }
-html.light .tj-cnav-entrance > div:first-child,
-html.light .tj-cnav-entrance > div:first-child::before,
-html.light .tj-cnav-entrance > div:first-child::after { background:#fff!important; background-image:none!important; border:1px solid #e2e8f0!important; box-shadow:none!important; filter:none!important; opacity:1!important; }
-html.light .tj-cnav-entrance > div:first-child > div,
-html.light .tj-cnav-entrance > div:first-child > div::before,
-html.light .tj-cnav-entrance > div:first-child > div::after { background:#fff!important; background-image:none!important; border:none!important; backdrop-filter:none!important; -webkit-backdrop-filter:none!important; box-shadow:none!important; filter:none!important; opacity:1!important; }
-html.light .tj-cnav-entrance .tj-cnav-tab svg{filter:none!important;}
-html.light [class*="cnav"],html.light [class*="bottom-nav"],html.light [class*="bottomNav"] { filter:none!important; box-shadow:none!important; background-image:none!important; mix-blend-mode:normal!important; }
-html.dark .tj-cnav-entrance > div:first-child{background:#0d0d0d!important;box-shadow:0 4px 18px rgba(0,0,0,.35)!important;}
-html.dark .tj-cnav-entrance > div:first-child > div{background:#0d0d0d!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.055),inset 0 -1px 0 rgba(0,0,0,.65)!important;}
-}
-
-/* Light-theme mobile header actions */
-html.light header div[style*="border-radius: 99px"]{background:#fff!important;border:1px solid #dbe2ea!important;box-shadow:0 2px 10px rgba(15,23,42,.08)!important;}
-html.light header div[style*="border-radius: 99px"] button[aria-label^="Switch to"]{color:#334155!important;background:transparent!important;}
-html.light header div[style*="border-radius: 99px"] button[aria-label^="Switch to"]:hover{background:#f1f5f9!important;}
-html.light header button[aria-label="Notifications"]{color:#334155!important;background:transparent!important;}
-html.light header button[aria-label="Notifications"]:hover,html.light header button[aria-label="Notifications"]:focus-visible{background:#f1f5f9!important;}
-html.light header button[aria-label="Notifications"] svg,html.light header button[aria-label^="Switch to"] svg{color:#334155!important;stroke:#334155!important;}
-html.light .lucide-bell,html.light .lucide-bell-ring{color:#475569!important;stroke:#475569!important;}
-
-/* HARD LIGHT-MODE FIX: the bottom nav is mounted inside a fixed wrapper in Layout.
-   The wrapper itself had no semantic class, so older glass/compositing rules could
-   still produce a dark halo around the white pill after the first paint.  Isolate
-   the whole fixed layer and make every possible visual effect explicit. */
-@media (max-width:768px){
-  html.light div:has(> .tj-mobile-nav-shell),
-  html.light div:has(> .tj-mobile-nav-shell) * {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-  }
-
-  html.light div:has(> .tj-mobile-nav-shell) {
-    background: #f8fafc !important;
-    background-image: none !important;
-    box-shadow: none !important;
-    -webkit-box-shadow: none !important;
-    filter: none !important;
-    -webkit-filter: none !important;
-    mix-blend-mode: normal !important;
-    opacity: 1 !important;
-    isolation: isolate !important;
-    contain: paint !important;
-    transform: translateZ(0) !important;
-    will-change: auto !important;
-  }
-
-  html.light .tj-mobile-nav-shell {
-    background: #f8fafc !important;
-    background-image: none !important;
-    box-shadow: none !important;
-    -webkit-box-shadow: none !important;
-    filter: none !important;
-    -webkit-filter: none !important;
-    mix-blend-mode: normal !important;
-    opacity: 1 !important;
-    isolation: isolate !important;
-    contain: paint !important;
-    transform: translateZ(0) !important;
-  }
-
-  html.light .tj-mobile-nav-pill,
-  html.light .tj-mobile-nav-pill::before,
-  html.light .tj-mobile-nav-pill::after {
-    background: #fff !important;
-    background-image: none !important;
-    box-shadow: none !important;
-    -webkit-box-shadow: none !important;
-    filter: none !important;
-    -webkit-filter: none !important;
-    mix-blend-mode: normal !important;
-    opacity: 1 !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+@media (max-width: 380px) {
+  .alert-modal-sheet div.flex.gap-2:has(> button[class*="capitalize"]),
+  .alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
 
-/* FINAL: make the entire fixed light-mode footer area opaque.
-   The visible defect is a dark compositor halo ABOVE the pill, not a shadow
-   declared on the pill itself. A fully opaque footer plane prevents any
-   underlying page/compositor layer from bleeding through that area. */
-@media (max-width:768px){
-  html.light div:has(> .tj-mobile-nav-shell) {
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    height: calc(90px + env(safe-area-inset-bottom, 0px)) !important;
-    min-height: 90px !important;
+/* ── Mobile chart Tools control: icon-only, compact ── */
+@media (max-width: 768px) {
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil) {
+    flex: 0 0 44px !important;
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+    height: 40px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 0 !important;
     box-sizing: border-box !important;
-    padding: 2px 14px 10px !important;
-    background: #f8fafc !important;
-    background-image: none !important;
-    border: 0 !important;
-    border-radius: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-color: #ffffff !important;
     box-shadow: none !important;
-    -webkit-box-shadow: none !important;
-    filter: none !important;
-    -webkit-filter: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    mix-blend-mode: normal !important;
-    opacity: 1 !important;
-    isolation: isolate !important;
-    contain: strict !important;
-    clip-path: inset(0) !important;
-    -webkit-clip-path: inset(0) !important;
-    transform: none !important;
-    will-change: auto !important;
+    text-shadow: none !important;
   }
 
-  html.light div:has(> .tj-mobile-nav-shell) .tj-mobile-nav-shell {
-    width: 100% !important;
-    min-height: 76px !important;
-    background: #f8fafc !important;
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil) svg {
+    width: 18px !important;
+    height: 18px !important;
+    flex: 0 0 18px !important;
+    color: #000000 !important;
+    stroke: #000000 !important;
+    filter: none !important;
+    margin: 0 !important;
+  }
+
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil) span,
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil) .sr-only {
+    display: none !important;
+  }
+
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil):hover,
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil):active,
+  .tj-ctrl-bar-inner button:has(> svg.lucide-pencil):focus {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-color: #ffffff !important;
     box-shadow: none !important;
     filter: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
   }
-}
-
-/* ALERT + MARKETS LIGHT MODE
-   The three mobile flows were using hard-coded dark surfaces while the rest of
-   the app follows html.light. Keep the existing dark theme untouched and only
-   normalize these flows when the light theme is active. */
-
-html.light .alert-modal-sheet,
-html.light .alert-modal-desktop-centering {
-  color: #0f172a !important;
-  background: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  box-shadow: 0 18px 60px rgba(15,23,42,.12) !important;
-}
-
-html.light .alert-modal-sheet [class*="bg-black"],
-html.light .alert-modal-desktop-centering [class*="bg-black"],
-html.light .alert-modal-sheet [class*="bg-white/"],
-html.light .alert-modal-desktop-centering [class*="bg-white/"] {
-  background-color: #f8fafc !important;
-  background-image: none !important;
-}
-
-html.light .alert-modal-sheet [class*="border-white/"],
-html.light .alert-modal-desktop-centering [class*="border-white/"] {
-  border-color: #e2e8f0 !important;
-}
-
-html.light .alert-modal-sheet [class*="text-white"],
-html.light .alert-modal-desktop-centering [class*="text-white"] {
-  color: #0f172a !important;
-}
-
-html.light .alert-modal-sheet [class*="text-muted-foreground"],
-html.light .alert-modal-desktop-centering [class*="text-muted-foreground"] {
-  color: #64748b !important;
-}
-
-html.light .alert-modal-sheet input,
-html.light .alert-modal-sheet textarea,
-html.light .alert-modal-sheet select,
-html.light .alert-modal-desktop-centering input,
-html.light .alert-modal-desktop-centering textarea,
-html.light .alert-modal-desktop-centering select {
-  color: #0f172a !important;
-  background: #f8fafc !important;
-  border-color: #cbd5e1 !important;
-  caret-color: #f59e0b !important;
-}
-
-html.light .alert-modal-sheet input::placeholder,
-html.light .alert-modal-sheet textarea::placeholder,
-html.light .alert-modal-desktop-centering input::placeholder,
-html.light .alert-modal-desktop-centering textarea::placeholder {
-  color: #94a3b8 !important;
-}
-
-/* SharedMarketSelector (Markets screen) has hoisted inline dark styles for
-   performance. Attribute selectors let light mode override those values without
-   changing the render architecture or tick-update path. */
-html.light div[style*="color: rgb(226, 232, 240)"][style*="background"] {
-  color: #0f172a !important;
-  background: #ffffff !important;
-}
-html.light div[style*="color: #e2e8f0"][style*="background"] {
-  color: #0f172a !important;
-  background: #ffffff !important;
-}
-
-html.light div[style*="background: rgb(0, 0, 0)"],
-html.light div[style*="background: #000000"] {
-  background: #ffffff !important;
-  background-image: none !important;
-  border-color: #e2e8f0 !important;
-}
-
-html.light div[style*="background: rgb(9, 11, 14)"],
-html.light div[style*="background: #090b0e"] {
-  background: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  box-shadow: 0 -8px 48px rgba(15,23,42,.12) !important;
-}
-
-html.light div[style*="color: rgb(226, 232, 240)"],
-html.light div[style*="color: #e2e8f0"],
-html.light span[style*="color: rgb(232, 240, 237)"],
-html.light span[style*="color: #e8f0ed"],
-html.light span[style*="color: rgb(221, 238, 221)"],
-html.light span[style*="color: #ddeedd"] {
-  color: #0f172a !important;
-}
-
-html.light div[style*="rgba(255,255,255"],
-html.light button[style*="rgba(255,255,255"],
-html.light input[style*="rgba(255,255,255"] {
-  background-color: #f8fafc !important;
-}
-
-html.light div[style*="border: 1px solid rgba(255,255,255"],
-html.light button[style*="border: 1px solid rgba(255,255,255"] {
-  border-color: #e2e8f0 !important;
-}
-
-html.light .dash-segment-bar {
-  background: #f1f5f9 !important;
-  border-color: #dbe3ec !important;
-  box-shadow: none !important;
-}
-
-html.light .dash-segment-btn-active {
-  background: #ffffff !important;
-  color: #0f172a !important;
-  border-color: #dbe3ec !important;
-  box-shadow: 0 2px 8px rgba(15,23,42,.08) !important;
-}
-
-html.light .dash-segment-btn-idle {
-  color: #64748b !important;
-  background: transparent !important;
-}
-
-html.light .dash-segment-btn-idle:hover {
-  color: #0f172a !important;
-  background: #e2e8f0 !important;
 }

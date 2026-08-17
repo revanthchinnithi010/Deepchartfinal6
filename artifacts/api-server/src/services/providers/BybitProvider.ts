@@ -4,8 +4,6 @@ import { logger } from "../../lib/logger.js";
 
 const BYBIT_PUBLIC_WS = "wss://stream.bybit.com/v5/public/linear";
 const PING_INTERVAL_MS = 20_000;
-const PONG_TIMEOUT_MS = 8_000;
-const STALE_FEED_TIMEOUT_MS = 45_000;
 
 interface BybitTrade { T?: number; p?: string; v?: string; S?: string; s?: string; }
 interface BybitMessage {
@@ -39,9 +37,6 @@ export class BybitProvider extends BaseProvider {
 
   private ws: WebSocket | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
-  private pongTimer: ReturnType<typeof setTimeout> | null = null;
-  private staleTimer: ReturnType<typeof setInterval> | null = null;
-  private lastMessageAt = 0;
   private internalToBybit = new Map<string, string>();
   private bybitToInternal = new Map<string, string>();
   private subscribedBybit = new Set<string>();
@@ -68,38 +63,24 @@ export class BybitProvider extends BaseProvider {
   }
 
   connect(): void {
-    if (
-      this.destroyed ||
-      this.ws?.readyState === WebSocket.OPEN ||
-      this.ws?.readyState === WebSocket.CONNECTING
-    ) return;
-
+    if (this.destroyed || this.ws?.readyState === WebSocket.OPEN) return;
     this.clearReconnectTimer();
-    this.clearHeartbeat();
+    this.clearPing();
     logger.info({ provider: this.name, url: BYBIT_PUBLIC_WS }, "BybitProvider: connecting");
     this.ws = new WebSocket(BYBIT_PUBLIC_WS, { handshakeTimeout: 10_000 });
 
     this.ws.on("open", () => {
       this.onConnected();
-      this.lastMessageAt = Date.now();
-      this.startHeartbeat();
-      logger.info({ provider: this.name, subscriptions: [...this.subscriptions] }, "BybitProvider: websocket ready — 24x7 watchdog active");
+      this.pingTimer = setInterval(() => {
+        if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ op: "ping" }));
+      }, PING_INTERVAL_MS);
+      logger.info({ provider: this.name, subscriptions: [...this.subscriptions] }, "BybitProvider: websocket ready");
     });
 
     this.ws.on("message", raw => {
       try {
         const msg = JSON.parse(raw.toString()) as BybitMessage;
-        this.lastMessageAt = Date.now();
-
-        if (msg.type === "COMMAND_RESP") return;
-        if (msg.op === "pong") {
-          this.clearPongTimeout();
-          return;
-        }
-        if (msg.success === true && msg.ret_msg === "pong") {
-          this.clearPongTimeout();
-          return;
-        }
+        if (msg.type === "COMMAND_RESP" || msg.op === "pong") return;
         if (msg.op === "subscribe") {
           if (msg.ret_msg || (typeof msg.retCode === "number" && msg.retCode !== 0)) {
             logger.warn({ provider: this.name, ret_msg: msg.ret_msg ?? msg.retMsg }, "BybitProvider: subscription rejected");
@@ -137,13 +118,10 @@ export class BybitProvider extends BaseProvider {
     this.ws.on("error", (err: Error) => {
       logger.warn({ provider: this.name, err: err.message }, "BybitProvider: websocket error");
       this.onError(err);
-      try { this.ws?.close(); } catch { /* close handler schedules retry */ }
     });
-
     this.ws.on("close", (code, reason) => {
-      this.clearHeartbeat();
-      this.subscribedBybit.clear();
-      logger.warn({ provider: this.name, code, reason: reason.toString() }, "BybitProvider: websocket closed — automatic reconnect enabled");
+      this.clearPing();
+      logger.warn({ provider: this.name, code, reason: reason.toString() }, "BybitProvider: websocket closed");
       this.onDisconnected(code);
     });
   }
@@ -164,7 +142,7 @@ export class BybitProvider extends BaseProvider {
     if (this.ws?.readyState === WebSocket.OPEN && !this.subscribedBybit.has(bybit)) {
       this.subscribedBybit.add(bybit);
       this.ws.send(JSON.stringify({ op: "subscribe", args: [`publicTrade.${bybit}`] }));
-      logger.info({ provider: this.name, symbol: internal, providerSymbol: bybit }, "BybitProvider: subscribed public trade stream");
+      logger.info({ provider: this.name, symbol: internal, providerSymbol: bybit }, "BybitProvider: auto-subscribed public trade stream");
     }
   }
 
@@ -181,58 +159,13 @@ export class BybitProvider extends BaseProvider {
   destroy(): void {
     this.destroyed = true;
     this.clearReconnectTimer();
-    this.clearHeartbeat();
+    this.clearPing();
     this.subscribedBybit.clear();
-    try { this.ws?.close(1000, "server shutdown"); } catch { /* ignore */ }
+    this.ws?.close();
     this.ws = null;
   }
 
-  private startHeartbeat(): void {
-    this.clearHeartbeat();
-
-    const ping = () => {
-      const ws = this.ws;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      try {
-        ws.send(JSON.stringify({ op: "ping" }));
-      } catch {
-        try { ws.close(); } catch { /* reconnect on close */ }
-        return;
-      }
-
-      this.clearPongTimeout();
-      this.pongTimer = setTimeout(() => {
-        this.pongTimer = null;
-        logger.warn({ provider: this.name }, "BybitProvider: pong timeout — forcing reconnect");
-        try { ws.close(4000, "pong timeout"); } catch { /* reconnect on close */ }
-      }, PONG_TIMEOUT_MS);
-    };
-
-    ping();
-    this.pingTimer = setInterval(ping, PING_INTERVAL_MS);
-
-    // A silent/stalled socket is unhealthy even if TCP still reports OPEN.
-    this.staleTimer = setInterval(() => {
-      if (this.ws?.readyState !== WebSocket.OPEN) return;
-      if (this.subscriptions.size === 0) return;
-      if (Date.now() - this.lastMessageAt > STALE_FEED_TIMEOUT_MS) {
-        logger.warn({ provider: this.name, lastMessageAt: this.lastMessageAt }, "BybitProvider: stale feed — forcing reconnect");
-        try { this.ws.close(4001, "stale feed"); } catch { /* reconnect on close */ }
-      }
-    }, 10_000);
-  }
-
-  private clearPongTimeout(): void {
-    if (this.pongTimer) clearTimeout(this.pongTimer);
-    this.pongTimer = null;
-  }
-
-  private clearHeartbeat(): void {
-    if (this.pingTimer) clearInterval(this.pingTimer);
-    if (this.pongTimer) clearTimeout(this.pongTimer);
-    if (this.staleTimer) clearInterval(this.staleTimer);
-    this.pingTimer = null;
-    this.pongTimer = null;
-    this.staleTimer = null;
+  private clearPing(): void {
+    if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
   }
 }

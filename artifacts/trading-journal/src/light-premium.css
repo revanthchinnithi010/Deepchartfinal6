@@ -5,6 +5,7 @@
    ===================================================================== */
 
 .light {
+  /* Page atmosphere: cool porcelain instead of flat white */
   --background: 220 24% 96%;
   --foreground: 222 28% 12%;
   --card: 0 0% 100%;
@@ -17,10 +18,13 @@
   --secondary-foreground: 222 28% 12%;
   --accent: 220 18% 91%;
   --accent-foreground: 222 28% 12%;
+
+  /* Premium indigo-violet accent, used sparingly */
   --primary: 258 82% 56%;
   --primary-foreground: 0 0% 100%;
   --ring: 258 82% 56%;
 
+  /* Glass surfaces */
   --glass-page: linear-gradient(145deg, #f7f8fc 0%, #eef1f7 52%, #f6f7fb 100%);
   --glass-card: rgba(255, 255, 255, 0.76);
   --glass-card-strong: rgba(255, 255, 255, 0.90);
@@ -29,6 +33,7 @@
   --glass-shadow: 0 18px 45px rgba(31, 41, 55, 0.10), 0 3px 12px rgba(31, 41, 55, 0.06);
   --glass-shadow-hover: 0 22px 52px rgba(31, 41, 55, 0.13), 0 5px 16px rgba(31, 41, 55, 0.07);
 
+  /* Dashboard surfaces */
   --dash-bg: transparent;
   --dash-overlay-bg: #f2f4f8;
   --dash-sheet-bg: linear-gradient(180deg, #f8f9fc 0%, #eef1f6 100%);
@@ -44,11 +49,13 @@
   --dash-cal-day-color: #172033;
   --dash-handle-bg: rgba(15,23,42,.16);
 
+  /* Dashboard text/icon tokens used by AccountValueWidget */
   --stat-title: #596274;
   --stat-sub: #7a8494;
   --stat-value: #171b26;
   --stat-icon: #8b94a3;
 
+  /* Light-mode elevation */
   --shadow-2xs: 0 1px 2px rgba(15,23,42,.04);
   --shadow-xs: 0 2px 7px rgba(15,23,42,.055);
   --shadow-sm: 0 5px 14px rgba(15,23,42,.065);
@@ -66,6 +73,8 @@
     var(--glass-page);
 }
 
+/* Give the dashboard an actual material backdrop so translucent cards have
+   something to refract. Glassmorphism works best over layered backgrounds. */
 .light .dash-account-card,
 .light .dash-account-card + *,
 .light [class*="glass"],
@@ -77,6 +86,7 @@
   backdrop-filter: blur(18px) saturate(135%);
 }
 
+/* Main account card: white glass with a controlled highlight edge */
 .light .dash-account-card {
   background: linear-gradient(145deg, rgba(255,255,255,.93), rgba(255,255,255,.70)) !important;
   border: 1px solid var(--glass-border) !important;
@@ -88,12 +98,14 @@
   box-shadow: var(--glass-shadow-hover), inset 0 1px 0 rgba(255,255,255,.98) !important;
 }
 
+/* The four KPI cells should read as one quiet inner surface, not four boxes. */
 .light .dash-account-card .grid {
   background: rgba(247,249,252,.68) !important;
   border-color: rgba(15,23,42,.075) !important;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.95);
 }
 
+/* Segmented Dashboard / Reports control */
 .light .dash-segmented-control,
 .light [data-dashboard-segmented-control] {
   background: rgba(221,225,233,.72) !important;
@@ -103,6 +115,7 @@
   backdrop-filter: blur(18px) saturate(135%);
 }
 
+/* Common white dashboard cards — preserve content, improve material */
 .light .dash-card,
 .light .dashboard-card {
   background: rgba(255,255,255,.76) !important;
@@ -112,6 +125,7 @@
   backdrop-filter: blur(16px) saturate(130%);
 }
 
+/* Calendar cells: less clinical, more tactile */
 .light .dash-calendar-day,
 .light [data-calendar-day] {
   background: rgba(255,255,255,.64);
@@ -119,6 +133,7 @@
   box-shadow: 0 2px 7px rgba(15,23,42,.035), inset 0 1px 0 rgba(255,255,255,.9);
 }
 
+/* Header: translucent floating surface instead of a hard white strip */
 .light header,
 .light .app-header {
   background: rgba(255,255,255,.72) !important;
@@ -127,111 +142,23 @@
   backdrop-filter: blur(18px) saturate(140%);
 }
 
-/* Light-mode header identity — REVANTH must be clearly visible in black. */
-.light .signature-shimmer,
-.light [class*="signature-shimmer"],
-html.light .signature-shimmer,
-html.light [class*="signature-shimmer"] {
-  color: #111827 !important;
-  -webkit-text-fill-color: #111827 !important;
-  background: none !important;
-  background-image: none !important;
-  text-shadow: none !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  filter: none !important;
-}
-
-/* If the dashboard brand is rendered through the shimmer wrapper, force its
-   text node and common descendants to inherit the light-mode black identity. */
-.light .signature-shimmer *,
-html.light .signature-shimmer * {
-  color: #111827 !important;
-  -webkit-text-fill-color: #111827 !important;
-  text-shadow: none !important;
-}
-
-/* Bottom navigation: intentionally NO shadow/filter/backdrop in light mode. */
+/* Bottom navigation: frosted floating dock */
 .light nav.fixed.bottom-0,
 .light .bottom-nav,
-.light [data-bottom-nav],
-.light .tj-mobile-nav-shell,
-.light .tj-mobile-nav-shell::before,
-.light .tj-mobile-nav-shell::after {
-  background: #f8fafc !important;
-  background-image: none !important;
-  border-color: #e2e8f0 !important;
-  box-shadow: none !important;
-  -webkit-box-shadow: none !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  filter: none !important;
-  mix-blend-mode: normal !important;
-  opacity: 1 !important;
+.light [data-bottom-nav] {
+  background: rgba(248,249,252,.76) !important;
+  border: 1px solid rgba(255,255,255,.92) !important;
+  box-shadow: 0 -4px 24px rgba(15,23,42,.08), 0 10px 30px rgba(15,23,42,.08), inset 0 1px 0 rgba(255,255,255,.98) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
+  backdrop-filter: blur(24px) saturate(145%);
 }
 
-@supports selector(:has(*)) {
-  .light div:has(> .tj-mobile-nav-shell) {
-    background: #f8fafc !important;
-    background-image: none !important;
-    box-shadow: none !important;
-    -webkit-box-shadow: none !important;
-    filter: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    mix-blend-mode: normal !important;
-    opacity: 1 !important;
-    isolation: isolate !important;
-  }
-}
-
-.light .tj-mobile-nav-pill,
-.light .tj-mobile-nav-pill::before,
-.light .tj-mobile-nav-pill::after {
-  background: #ffffff !important;
-  background-image: none !important;
-  box-shadow: none !important;
-  -webkit-box-shadow: none !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  filter: none !important;
-  mix-blend-mode: normal !important;
-}
-
-.light .tj-mobile-nav-tab,
-.light .tj-mobile-nav-tab::before,
-.light .tj-mobile-nav-tab::after {
-  background: transparent !important;
-  background-image: none !important;
-  box-shadow: none !important;
-  -webkit-box-shadow: none !important;
-  filter: none !important;
-  mix-blend-mode: normal !important;
-}
-
-/* Dashboard quick-access Alerts: keep the button itself transparent and make
-   only the 64px icon container a true white circle in light mode. */
-.light button:has(svg path[fill="rgba(255,255,255,0.55)"]) {
-  background: transparent !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
-
-.light button:has(svg path[fill="rgba(255,255,255,0.55)"]) > div {
-  background: #ffffff !important;
-  border: 1px solid rgba(15,23,42,.06) !important;
-  border-radius: 9999px !important;
-  box-shadow: 0 6px 18px rgba(15,23,42,.06), inset 0 1px 0 rgba(255,255,255,.98) !important;
-}
-
-.light button:has(svg path[fill="rgba(255,255,255,0.55)"]) svg path {
-  fill: #111827 !important;
-}
-
+/* Broker shortcut circles: replace flat gray with soft glass discs */
 .light button.rounded-full {
   box-shadow: 0 8px 20px rgba(15,23,42,.065), inset 0 1px 0 rgba(255,255,255,.95);
 }
 
+/* Inputs / compact controls */
 .light input,
 .light select,
 .light textarea {
@@ -247,62 +174,13 @@ html.light .signature-shimmer * {
   box-shadow: 0 0 0 3px rgba(124,58,237,.08), inset 0 1px 2px rgba(15,23,42,.02) !important;
 }
 
+/* Do not turn profit/loss semantics into glass colors. */
 .light .text-green-400,
 .light .text-green-500,
 .light .text-emerald-400,
 .light .text-emerald-500 { color: #16A34A !important; }
 .light .text-red-400,
 .light .text-red-500 { color: #DC2626 !important; }
-
-@media (max-width:768px) {
-  html.light .tj-mobile-nav-host {
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    width: 100% !important;
-    height: 110px !important;
-    min-height: 110px !important;
-    padding: 0 !important;
-    box-sizing: border-box !important;
-    background: #f8fafc !important;
-    background-image: none !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    -webkit-box-shadow: none !important;
-    filter: none !important;
-    -webkit-filter: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    mix-blend-mode: normal !important;
-    opacity: 1 !important;
-    isolation: isolate !important;
-    contain: none !important;
-    transform: none !important;
-    will-change: auto !important;
-    z-index: 2147483647 !important;
-    overflow: hidden !important;
-  }
-
-  html.light .tj-mobile-nav-host .tj-mobile-nav-shell {
-    height: 76px !important;
-    min-height: 76px !important;
-    background: #f8fafc !important;
-    box-shadow: none !important;
-    filter: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-  }
-
-  html.light .tj-mobile-nav-host .tj-mobile-nav-pill {
-    background: #ffffff !important;
-    box-shadow: none !important;
-    filter: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .light .dash-account-card { transition: none !important; }

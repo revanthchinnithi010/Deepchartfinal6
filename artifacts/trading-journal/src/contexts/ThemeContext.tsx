@@ -32,6 +32,7 @@ function getInitialMode(): ThemeMode {
   try {
     const stored = localStorage.getItem("tj-theme-mode") as ThemeMode | null;
     if (stored === "light" || stored === "dark" || stored === "system") return stored;
+    // Legacy: check old "tj-theme" key
     const legacy = localStorage.getItem("tj-theme") as Theme | null;
     if (legacy === "light" || legacy === "dark") return legacy;
   } catch {}
@@ -45,21 +46,13 @@ function resolveTheme(mode: ThemeMode): Theme {
 
 function applyTheme(t: Theme) {
   const html = document.documentElement;
-  const isLight = t === "light";
-  if (isLight) {
+  if (t === "light") {
     html.classList.add("light");
     html.classList.remove("dark");
   } else {
     html.classList.add("dark");
     html.classList.remove("light");
   }
-
-  // Keep Android/Chrome's browser chrome and edge-to-edge bottom surface in
-  // sync with the actual app theme. The HTML shell sets this before first
-  // paint; this keeps it correct after a runtime theme toggle as well.
-  html.style.colorScheme = isLight ? "light" : "dark";
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", isLight ? "#f8fafc" : "#000000");
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -74,6 +67,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applyTheme(theme);
   }, [theme]);
 
+  // Listen to system preference changes when mode is "system"
   useEffect(() => {
     if (themeMode !== "system") return;
     const mq = window.matchMedia("(prefers-color-scheme: light)");
