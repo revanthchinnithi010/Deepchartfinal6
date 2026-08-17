@@ -1,5 +1,7 @@
 import { memo } from "react";
 import { useLiveMarketContext } from "@/contexts/LiveMarketContext";
+import { useChartStore } from "@/store/chartStore";
+import { useSymbolTick } from "@/store/tickStore";
 
 interface ConnectionStatusProps {
   compact?: boolean;
@@ -15,11 +17,19 @@ const STATUS_CONFIG = {
 
 export const ConnectionStatus = memo(function ConnectionStatus({ compact }: ConnectionStatusProps) {
   const { wsStatus, latencyMs } = useLiveMarketContext();
-  const cfg = STATUS_CONFIG[wsStatus] ?? STATUS_CONFIG.disconnected;
+  const symbol = useChartStore(s => s.symbol);
+  const tick = useSymbolTick(symbol);
+
+  // Crypto charts now have a direct Bybit publicTrade connection independent
+  // of the app backend socket. If a fresh Bybit tick is arriving, the market
+  // feed is live even when /api/ws is offline.
+  const bybitLive = Boolean(tick && Date.now() - tick.lastTick < 10_000);
+  const effectiveStatus = bybitLive ? "connected" : wsStatus;
+  const cfg = STATUS_CONFIG[effectiveStatus] ?? STATUS_CONFIG.disconnected;
 
   return (
     <div
-      title={`WebSocket: ${cfg.label}${latencyMs !== null ? ` · ${latencyMs}ms` : ""}`}
+      title={`WebSocket: ${cfg.label}${latencyMs !== null && effectiveStatus === "connected" ? ` · ${latencyMs}ms` : ""}`}
       style={{
         display:     "flex",
         alignItems:  "center",
@@ -33,7 +43,6 @@ export const ConnectionStatus = memo(function ConnectionStatus({ compact }: Conn
         userSelect:  "none",
       }}
     >
-      {/* Dot */}
       <div style={{ position: "relative", width: 7, height: 7, flexShrink: 0 }}>
         <div style={{
           width: 7, height: 7, borderRadius: "50%",
@@ -63,7 +72,7 @@ export const ConnectionStatus = memo(function ConnectionStatus({ compact }: Conn
         </span>
       )}
 
-      {!compact && latencyMs !== null && wsStatus === "connected" && (
+      {!compact && latencyMs !== null && effectiveStatus === "connected" && !bybitLive && (
         <span style={{
           fontSize:   9.5,
           fontWeight: 500,
@@ -74,11 +83,7 @@ export const ConnectionStatus = memo(function ConnectionStatus({ compact }: Conn
         </span>
       )}
 
-      <style>{`
-        @keyframes ping {
-          75%, 100% { transform: scale(2); opacity: 0; }
-        }
-      `}</style>
+      <style>{`@keyframes ping { 75%, 100% { transform: scale(2); opacity: 0; } }`}</style>
     </div>
   );
 });
