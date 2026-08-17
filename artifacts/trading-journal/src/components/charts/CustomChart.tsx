@@ -1061,17 +1061,19 @@ const CustomChart = memo(function CustomChart({
   //   • If on a touch device and last render < 33 ms ago: skip (30 fps cap).
   //   • Otherwise: schedule one RAF that calls updateBar() with the latest bar.
   // Using useCallback with [] deps is safe because every value it reads is a ref.
-  const scheduleChartUpdate = useCallback(() => {
+  const scheduleChartUpdate = useCallback((forceImmediate = false) => {
     // Sheet drag lock: suppress chart canvas repaint while a BottomSheet is being
     // dragged. The pending bar is preserved in pendingChartBarRef and will be
     // flushed immediately when drag ends via sheetDragState.flush().
     if (sheetDragState.active) return;
     // Already scheduled for this frame — frame-coalescing is working
     if (chartUpdateRafRef.current !== null) return;
-    // 30 fps cap on touch devices: skip if last render was < 33 ms ago
-    if (isTouchDeviceRef.current) {
+    // Keep the normal 30 fps touch cap for continuous ticks, but NEVER delay
+    // the first tick of a newly opened candle. That boundary event must render
+    // on the next animation frame so the new candle appears immediately.
+    if (!forceImmediate && isTouchDeviceRef.current) {
       const elapsed = performance.now() - lastRenderMsRef.current;
-      if (elapsed < 33) return; // will be re-triggered by the next incoming tick
+      if (elapsed < 33) return; // continuous tick rendering remains capped
     }
     chartUpdateRafRef.current = requestAnimationFrame(() => {
       chartUpdateRafRef.current = null;
@@ -3347,7 +3349,7 @@ const CustomChart = memo(function CustomChart({
         const result = agg.ingest(price, volume, tsSec);
         if (!result) return; // identical consecutive price — skip
 
-        const { bar } = result;
+        const { bar, isNewBar } = result;
         const cs = mainRef.current;
         if (!cs) return;
 
@@ -3356,7 +3358,23 @@ const CustomChart = memo(function CustomChart({
         // NO series.update() is called synchronously — zero LWC work per tick.
         // RAF flush renders the single latest bar; suppressed while dragging.
         pendingChartBarRef.current = bar;
-        scheduleChartUpdate();
+
+        // Commit the new candle to the local ring immediately. The client tick
+        // path is authoritative for the opening tick; waiting for the server's
+        // candle_update would add an unnecessary network/event-loop delay.
+        if (isNewBar) {
+          const stored = barsRef.current;
+          const last = stored[stored.length - 1];
+          if (!last || bar.time > last.time) {
+            stored.push(bar);
+            if (stored.length > 6000) stored.shift();
+            oldestBarTimeRef.current ??= stored[0]?.time ?? bar.time;
+          }
+        }
+
+        // Boundary events bypass the touch-device 30 fps cap so the new candle
+        // is painted on the very next frame. Continuous ticks keep the cap.
+        scheduleChartUpdate(isNewBar);
 
         // ── Auto-follow for tick-driven new-bar events ─────────────────────
         // When the trade aggregator opens a new bar (e.g. first tick of a new
