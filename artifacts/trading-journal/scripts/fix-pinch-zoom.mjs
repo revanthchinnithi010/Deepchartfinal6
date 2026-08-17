@@ -32,10 +32,8 @@ const next = `      const currentBars = Math.max(0.000001, (range.to as number) 
       const ratio       = prevSpan / span;
       if (!Number.isFinite(ratio) || ratio <= 0) return;
 
-      // No artificial min/max zoom. Lightweight Charts can represent logical
-      // ranges beyond the loaded dataset, so keep expanding/contracting the
-      // range instead of clamping it. Clamping here was the source of the
-      // "Limit" state and the horizontal jump at the zoom boundary.
+      // No artificial min/max zoom. Keep the logical range proportional to
+      // the finger span instead of clamping it at a zoom boundary.
       const newBars = currentBars * ratio;
       if (!Number.isFinite(newBars) || newBars <= 0) return;
 
@@ -45,20 +43,20 @@ const next = `      const currentBars = Math.max(0.000001, (range.to as number) 
       const anchor = ch.timeScale().coordinateToLogical(midX)
                      ?? (((range.from as number) + (range.to as number)) / 2);
 
-      // Preserve the finger anchor exactly. This prevents any horizontal
-      // translation when a pinch reaches a very wide logical range.
+      // Preserve the finger anchor exactly. This prevents horizontal drift
+      // when the range becomes wider than the loaded candle set.
       const anchorFrac = (anchor - (range.from as number)) / currentBars;
       const newFrom  = anchor - newBars * anchorFrac;
       const newTo    = newFrom + newBars;`;
 
-if (!s.includes(old)) {
-  if (s.includes("const newBars = currentBars * ratio;")) {
-    console.log("[pinch-fix] already applied");
-    process.exit(0);
-  }
-  throw new Error("Pinch zoom block not found; refusing to modify blindly");
+if (s.includes(old)) {
+  s = s.replace(old, next);
 }
 
-s = s.replace(old, next);
+// The previous minBarSpacing=4 was itself a hard zoom-out boundary on mobile.
+// Use a very small spacing so pinch zoom can continue without LWC forcing the
+// logical range to another position at the boundary.
+s = s.replace(/minBarSpacing:\s*4\b/g, "minBarSpacing: 0.01");
+
 fs.writeFileSync(file, s);
-console.log("[pinch-fix] Removed artificial zoom limits and boundary drift");
+console.log("[pinch-fix] Unlimited pinch zoom + no min-spacing boundary");
