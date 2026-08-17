@@ -48,7 +48,7 @@
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.5.2",
     "framer-motion": "^12.23.12",
-    "html2canvas": "^1.4.1",
+    "html2canvas": "^1.4.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.468.0",
     "motion": "^12.23.12",
@@ -66,6 +66,7 @@
     "animejs": "4.5.0",
     "html2canvas": "^1.4.1",
     "lightweight-charts": "^5.0.8",
-    "zustand": "^5.0.3"
+    "zustand": "^5.0.3",
+    "wouter": "^3.7.1"
   }
 }
