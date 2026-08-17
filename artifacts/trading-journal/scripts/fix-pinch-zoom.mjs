@@ -39,7 +39,7 @@ const next = `      const currentBars = Math.max(0.000001, (range.to as number) 
 
       // ── Anchor: keep the midpoint under the fingers fixed ────────────────
       const rect   = container.getBoundingClientRect();
-      const midX   = ((t0.clientX + t1.clientY) / 2) - rect.left;
+      const midX   = ((t0.clientX + t1.clientX) / 2) - rect.left;
       const anchor = ch.timeScale().coordinateToLogical(midX)
                      ?? (((range.from as number) + (range.to as number)) / 2);
 
