@@ -15,38 +15,38 @@ const IndicatorTags = memo(function IndicatorTags({ topOffset = 8 }: { topOffset
       display: "flex", flexDirection: "column", gap: 2,
       pointerEvents: "all",
     }}>
-      {/* Header row with collapse toggle */}
-      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: collapsed ? 0 : 2 }}>
+      {/* Compact collapse control — arrow only, like TradingView */}
+      <div style={{ display: "flex", alignItems: "center", height: 16, marginBottom: collapsed ? 0 : 1 }}>
         <button
           title={collapsed ? "Show indicators" : "Hide indicators"}
+          aria-label={collapsed ? "Show indicators" : "Hide indicators"}
           onClick={() => setCollapsed(c => !c)}
           style={{
-            display: "flex", alignItems: "center", gap: 5,
-            height: 20, padding: "0 7px",
-            background: "rgba(7,17,13,0.75)",
-            border: "1px solid rgba(183,255,90,0.15)",
-            borderRadius: 5,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 18, height: 16, padding: 0,
+            background: "rgba(0,0,0,0.48)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            borderRadius: 4,
             cursor: "pointer",
-            color: "rgba(183,220,190,0.6)",
-            fontSize: 10, fontWeight: 600,
-            backdropFilter: "blur(8px)",
-            transition: "border-color .15s, color .15s",
+            color: "rgba(255,255,255,0.55)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+            transition: "background .15s, color .15s",
             userSelect: "none",
           }}
           onMouseEnter={e => {
-            (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(183,255,90,0.35)";
-            (e.currentTarget as HTMLButtonElement).style.color = "#B7FF5A";
+            (e.currentTarget as HTMLButtonElement).style.background = "rgba(0,0,0,0.65)";
+            (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.9)";
           }}
           onMouseLeave={e => {
-            (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(183,255,90,0.15)";
-            (e.currentTarget as HTMLButtonElement).style.color = "rgba(183,220,190,0.6)";
+            (e.currentTarget as HTMLButtonElement).style.background = "rgba(0,0,0,0.48)";
+            (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.55)";
           }}
         >
           {collapsed
-            ? <ChevronDown style={{ width: 10, height: 10 }} />
-            : <ChevronUp style={{ width: 10, height: 10 }} />
+            ? <ChevronDown style={{ width: 11, height: 11 }} />
+            : <ChevronUp style={{ width: 11, height: 11 }} />
           }
-          <span>{appliedIndicators.length} indicator{appliedIndicators.length !== 1 ? "s" : ""}</span>
         </button>
       </div>
 
@@ -202,11 +202,12 @@ function IndicatorTag({ indicator, onToggleVisible, onDelete }: {
         style={{
           display: "flex", alignItems: "center", gap: 2,
           height: 28,
-          background: hovered ? "rgba(7,17,13,0.92)" : "rgba(7,17,13,0.82)",
-          border: `1px solid ${hovered ? "rgba(183,255,90,0.28)" : "rgba(183,255,90,0.1)"}`,
+          background: hovered ? "rgba(0,0,0,0.64)" : "rgba(0,0,0,0.48)",
+          border: "1px solid rgba(0,0,0,0.18)",
           borderRadius: 6,
-          backdropFilter: "blur(10px)",
-          transition: "border-color 0.15s, background 0.15s",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          transition: "background 0.15s",
           paddingLeft: 8, paddingRight: 4,
           userSelect: "none",
         }}
@@ -221,7 +222,7 @@ function IndicatorTag({ indicator, onToggleVisible, onDelete }: {
         }} />
         <span style={{
           fontSize: 12, fontWeight: 600,
-          color: indicator.visible ? "rgba(200,228,204,0.95)" : "rgba(183,220,190,0.3)",
+          color: indicator.visible ? "rgba(235,240,236,0.95)" : "rgba(235,240,236,0.3)",
           whiteSpace: "nowrap", lineHeight: 1,
         }}>
           {indicator.label}
@@ -281,14 +282,14 @@ function IconBtn({ title, onClick, children, ref }: {
       style={{
         background: "none", border: "none", cursor: "pointer",
         padding: "3px 5px", borderRadius: 4, display: "flex", alignItems: "center",
-        color: "rgba(183,220,190,0.55)",
+        color: "rgba(220,225,222,0.55)",
       }}
       onMouseEnter={e => {
-        (e.currentTarget as HTMLButtonElement).style.color = "#B7FF5A";
-        (e.currentTarget as HTMLButtonElement).style.background = "rgba(183,255,90,0.1)";
+        (e.currentTarget as HTMLButtonElement).style.color = "#ffffff";
+        (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)";
       }}
       onMouseLeave={e => {
-        (e.currentTarget as HTMLButtonElement).style.color = "rgba(183,220,190,0.55)";
+        (e.currentTarget as HTMLButtonElement).style.color = "rgba(220,225,222,0.55)";
         (e.currentTarget as HTMLButtonElement).style.background = "transparent";
       }}
     >
