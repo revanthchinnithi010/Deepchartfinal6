@@ -1,17 +1,24 @@
 import type { OHLCBar } from "@/store/chartStore";
 
+/**
+ * EMA with a continuous seed from the first available candle.
+ *
+ * The old implementation returned null for the first period-1 candles, which
+ * made a 100 EMA disappear over the left side of the loaded historical chart.
+ * We intentionally seed from the first close so the line is continuous across
+ * every loaded historical candle. Once enough samples exist, the calculation
+ * converges to the standard EMA recurrence.
+ */
 export function calcEMA(values: number[], period: number): (number | null)[] {
-  const out: (number | null)[] = [];
-  let ema: number | null = null;
-  const k = 2 / (period + 1);
-  for (let i = 0; i < values.length; i++) {
-    if (i < period - 1) { out.push(null); continue; }
-    if (i === period - 1) {
-      ema = values.slice(0, period).reduce((s, v) => s + v, 0) / period;
-      out.push(ema); continue;
-    }
-    ema = values[i] * k + ema! * (1 - k);
-    out.push(ema);
+  if (!values.length) return [];
+  const p = Math.max(1, Math.floor(period) || 1);
+  const k = 2 / (p + 1);
+  const out: (number | null)[] = new Array(values.length);
+  let ema = values[0];
+  out[0] = ema;
+  for (let i = 1; i < values.length; i++) {
+    ema = values[i] * k + ema * (1 - k);
+    out[i] = ema;
   }
   return out;
 }
@@ -51,46 +58,21 @@ export function calcRSI(closes: number[], period: number): (number | null)[] {
 }
 
 export interface SupertrendPoint { value: number; bull: boolean }
-
 export function calcSupertrend(bars: OHLCBar[], period = 10, mult = 3): (SupertrendPoint | null)[] {
   if (bars.length < period + 1) return bars.map(() => null);
-
-  // ATR
-  const trArr: number[] = bars.map((b, i) => {
-    if (i === 0) return b.high - b.low;
-    const prev = bars[i - 1];
-    return Math.max(b.high - b.low, Math.abs(b.high - prev.close), Math.abs(b.low - prev.close));
-  });
+  const trArr = bars.map((b, i) => { if (i === 0) return b.high - b.low; const prev = bars[i - 1]; return Math.max(b.high - b.low, Math.abs(b.high - prev.close), Math.abs(b.low - prev.close)); });
   const atr: (number | null)[] = new Array(period - 1).fill(null);
   let atrVal = trArr.slice(0, period).reduce((s, v) => s + v, 0) / period;
   atr.push(atrVal);
-  for (let i = period; i < trArr.length; i++) {
-    atrVal = (atrVal * (period - 1) + trArr[i]) / period;
-    atr.push(atrVal);
-  }
-
+  for (let i = period; i < trArr.length; i++) { atrVal = (atrVal * (period - 1) + trArr[i]) / period; atr.push(atrVal); }
   const out: (SupertrendPoint | null)[] = new Array(period - 1).fill(null);
   let prevUp = 0, prevDn = 0, trend = true;
-
   for (let i = period - 1; i < bars.length; i++) {
-    const b = bars[i];
-    const hl2 = (b.high + b.low) / 2;
-    const a = atr[i]!;
-    let up = hl2 + mult * a;
-    let dn = hl2 - mult * a;
-
-    if (i > period - 1) {
-      if (prevDn > dn || bars[i - 1].close < prevDn) dn = prevDn;
-      if (prevUp < up || bars[i - 1].close > prevUp) up = prevUp;
-      if (trend && b.close < dn) trend = false;
-      else if (!trend && b.close > up) trend = true;
-    }
-
-    prevUp = up; prevDn = dn;
-    out.push({ value: trend ? dn : up, bull: trend });
+    const b = bars[i], hl2 = (b.high + b.low) / 2, a = atr[i]!;
+    let up = hl2 + mult * a, dn = hl2 - mult * a;
+    if (i > period - 1) { if (prevDn > dn || bars[i - 1].close < prevDn) dn = prevDn; if (prevUp < up || bars[i - 1].close > prevUp) up = prevUp; if (trend && b.close < dn) trend = false; else if (!trend && b.close > up) trend = true; }
+    prevUp = up; prevDn = dn; out.push({ value: trend ? dn : up, bull: trend });
   }
-
   return out;
 }
-
 export type { OHLCBar };
