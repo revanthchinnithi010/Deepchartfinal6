@@ -3,19 +3,29 @@ import { Eye, EyeOff, Trash2, Settings, MoreHorizontal, Code2, Copy, ChevronDown
 import { createPortal } from "react-dom";
 import { useIndicatorStore, type AppliedIndicator } from "@/store/indicatorStore";
 
-const IndicatorTags = memo(function IndicatorTags({ topOffset = 8 }: { topOffset?: number }) {
+const IndicatorTags = memo(function IndicatorTags({ topOffset = 20 }: { topOffset?: number }) {
   const { appliedIndicators, toggleVisible, removeIndicator } = useIndicatorStore();
   const [collapsed, setCollapsed] = useState(false);
 
   if (appliedIndicators.length === 0) return null;
 
   return (
-    <div style={{ position: "absolute", top: topOffset - 8, left: 8, zIndex: 20, display: "flex", flexDirection: "column", gap: 2, pointerEvents: "all" }}>
+    <div style={{
+      position: "absolute", top: topOffset, left: 8, zIndex: 20,
+      display: "flex", flexDirection: "column", gap: 3,
+      pointerEvents: "all",
+    }}>
       <div style={{ display: "flex", alignItems: "center", height: 18, marginBottom: collapsed ? 0 : 1 }}>
-        <button title={collapsed ? "Show indicators" : "Hide indicators"} aria-label={collapsed ? "Show indicators" : "Hide indicators"} onClick={() => setCollapsed(c => !c)} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 18, padding: 0, background: "rgba(0,0,0,0.48)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 4, cursor: "pointer", color: "rgba(255,255,255,0.7)" }}>
+        <button title={collapsed ? "Show indicators" : "Hide indicators"} aria-label={collapsed ? "Show indicators" : "Hide indicators"} onClick={() => setCollapsed(c => !c)} style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 22, height: 18, padding: 0,
+          background: "rgba(0,0,0,0.48)", border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 4, cursor: "pointer", color: "rgba(255,255,255,0.7)"
+        }}>
           {collapsed ? <ChevronDown style={{ width: 13, height: 13 }} /> : <ChevronUp style={{ width: 13, height: 13 }} />}
         </button>
       </div>
+
       {!collapsed && appliedIndicators.map(ind => (
         <IndicatorTag key={ind.id} indicator={ind} onToggleVisible={() => toggleVisible(ind.id)} onDelete={() => removeIndicator(ind.id)} />
       ))}
@@ -58,8 +68,15 @@ function IndicatorTag({ indicator, onToggleVisible, onDelete }: { indicator: App
   const moreRef = useRef<HTMLButtonElement>(null);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; left: number } | null>(null);
   const handleMore = () => { const rect = moreRef.current?.getBoundingClientRect(); if (rect) { setMenuAnchor({ top: rect.bottom + 4, left: rect.left }); setShowMore(true); } };
+
   return <>
-    <div style={{ display: "flex", alignItems: "center", gap: 3, minHeight: 34, background: hovered ? "rgba(0,0,0,0.64)" : "rgba(0,0,0,0.48)", border: "1px solid rgba(0,0,0,0.18)", borderRadius: 7, backdropFilter: "blur(8px)", paddingLeft: 9, paddingRight: 5, userSelect: "none", transform: "translateY(-6px)" }} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+    <div style={{
+      display: "flex", alignItems: "center", gap: 3, minHeight: 34,
+      background: hovered ? "rgba(0,0,0,0.64)" : "rgba(0,0,0,0.48)",
+      border: "1px solid rgba(0,0,0,0.18)", borderRadius: 7,
+      backdropFilter: "blur(8px)", paddingLeft: 9, paddingRight: 5,
+      userSelect: "none"
+    }} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <div style={{ width: 9, height: 9, borderRadius: "50%", background: indicator.color, flexShrink: 0, marginRight: 7, opacity: indicator.visible ? 1 : 0.3, boxShadow: indicator.visible ? `0 0 5px ${indicator.color}88` : "none" }} />
       <span style={{ fontSize: 14, fontWeight: 600, color: indicator.visible ? "rgba(235,240,236,0.95)" : "rgba(235,240,236,0.3)", whiteSpace: "nowrap", lineHeight: 1.1 }}>{indicator.label}</span>
       {indicator.type === "CUSTOM" && <span style={{ fontSize: 10, color: "#B7FF5A", marginLeft: 5, opacity: 0.65, fontWeight: 700 }}>custom</span>}
@@ -70,13 +87,18 @@ function IndicatorTag({ indicator, onToggleVisible, onDelete }: { indicator: App
         <IconBtn ref={moreRef} title="More" onClick={handleMore}><MoreHorizontal style={{ width: 16, height: 16 }} /></IconBtn>
       </div>}
     </div>
+
     {showMore && menuAnchor && <MoreMenu indicator={indicator} anchor={menuAnchor} onClose={() => setShowMore(false)} onDelete={onDelete} onShowPine={() => setShowPine(true)} onDuplicate={() => duplicateIndicator(indicator.id)} />}
     {showPine && <PineModal code={(indicator.pineCode as string) ?? ""} name={indicator.label} onClose={() => setShowPine(false)} />}
   </>;
 }
 
 function IconBtn({ title, onClick, children, ref }: { title: string; onClick: () => void; children: React.ReactNode; ref?: React.Ref<HTMLButtonElement>; }) {
-  return <button ref={ref} title={title} onClick={e => { e.stopPropagation(); onClick(); }} style={{ background: "none", border: "none", cursor: "pointer", padding: "5px 6px", borderRadius: 5, display: "flex", alignItems: "center", color: "rgba(220,225,222,0.75)", minWidth: 30, minHeight: 30, justifyContent: "center" }} onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#ffffff"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"; }} onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(220,225,222,0.75)"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>{children}</button>;
+  return <button ref={ref} title={title} onClick={e => { e.stopPropagation(); onClick(); }} style={{
+    background: "none", border: "none", cursor: "pointer", padding: "5px 6px", borderRadius: 5,
+    display: "flex", alignItems: "center", color: "rgba(220,225,222,0.75)",
+    minWidth: 30, minHeight: 30, justifyContent: "center"
+  }} onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#ffffff"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"; }} onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(220,225,222,0.75)"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>{children}</button>;
 }
 
 export default IndicatorTags;
