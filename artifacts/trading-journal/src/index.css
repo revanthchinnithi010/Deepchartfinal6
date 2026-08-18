@@ -97,3 +97,13 @@
     filter: none !important;
   }
 }
+
+/* ── Chart tooltip passthrough on selected drawings ────────────────────────
+   Selected drawing body hit-paths use cursor:move + pointer-events:all.
+   That SVG hit layer was intercepting pointer/touch movement, so the
+   Lightweight Charts crosshair/OHLC tooltip stopped updating when the cursor
+   or finger touched a trendline. Keep anchor handles interactive, but let the
+   selected line body pass movement through to the chart. */
+svg path[stroke="transparent"][style*="cursor: move"] {
+  pointer-events: none !important;
+}
