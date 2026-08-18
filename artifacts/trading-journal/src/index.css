@@ -46,7 +46,7 @@
 @media (max-width: 380px) {
   .alert-modal-sheet div.flex.gap-2:has(> button[class*="capitalize"]),
   .alert-modal-desktop-centering div.flex.gap-2:has(> button[class*="capitalize"]) {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -106,4 +106,14 @@
    selected line body pass movement through to the chart. */
 svg path[stroke="transparent"][style*="cursor: move"] {
   pointer-events: none !important;
+}
+
+/* ── Mobile chart indicator legend placement ───────────────────────────────
+   The symbol/timeframe header lives at the top-left of the chart. IndicatorTags
+   used to start at the same 8px position and covered the symbol. Move only the
+   indicator legend down so the symbol stays visible above it. */
+@media (max-width: 768px) {
+  div[style*="top: 8px"][style*="left: 8px"][style*="z-index: 20"] {
+    top: 38px !important;
+  }
 }
