@@ -1,7 +1,7 @@
 import { memo, useRef, useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { X, TrendingUp, Trash2, Plus, Activity } from "lucide-react";
+import { X, TrendingUp, Trash2, Plus, Activity, ChevronLeft } from "lucide-react";
 import { useIndicatorStore, type IndicatorType } from "@/store/indicatorStore";
 import { motion } from "motion/react";
 import { AnimatedModal, AnimatedList, AnimatedListItem } from "@/components/animations";
@@ -45,33 +45,60 @@ const CustomIndicatorModal = memo(function CustomIndicatorModal({ onClose, onAdd
   const [code, setCode] = useState("");
   const handleAdd = () => { if (!name.trim()) return; onAdd(name.trim(), code.trim()); onClose(); };
   return (
-    <AnimatedModal isOpen={true} onClose={onClose} title="Custom Indicator" mode="dialog">
-      <div style={{ padding: 16 }}>
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "rgba(167,184,169,0.7)", marginBottom: 6 }}>Indicator Name</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. My EMA, BOS, FVG"
-            style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "9px 12px", fontSize: 12, color: "#d1d4dc", outline: "none", fontFamily: "inherit" }} />
+    <AnimatedModal isOpen={true} onClose={onClose} title="Add Custom Indicator" mode="dialog">
+      <div style={{ padding: 18 }}>
+        <div style={{ marginBottom: 16 }}>
+          <label style={fieldLabel}>Indicator name</label>
+          <input
+            type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder="e.g. My EMA, BOS, FVG"
+            style={inputStyle}
+          />
         </div>
-        <div style={{ marginBottom: 18 }}>
-          <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "rgba(167,184,169,0.7)", marginBottom: 6 }}>Pine Script Code</label>
-          <div style={{ marginBottom: 6, fontSize: 10, color: "rgba(255,255,255,0.3)", lineHeight: 1.5 }}>Supports: ta.ema, ta.sma, ta.rsi, ta.vwap, BOS/CHoCH, FVG, OB, Liquidity</div>
-          <textarea value={code} onChange={e => setCode(e.target.value)} placeholder={`indicator("My Strategy")\n\n// Detects BOS/CHoCH automatically\n// FVG, Order Blocks, Liquidity\n// or: plot(ta.ema(close, 200))`} rows={8}
-            style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#d1d4dc", outline: "none", resize: "vertical", fontFamily: "'JetBrains Mono', 'Fira Mono', 'Consolas', monospace", lineHeight: 1.6, minHeight: 140 }} />
+        <div style={{ marginBottom: 20 }}>
+          <label style={fieldLabel}>Pine Script</label>
+          <div style={{ marginBottom: 7, fontSize: 10, color: "rgba(255,255,255,0.38)", lineHeight: 1.5 }}>
+            Supports EMA, SMA, RSI, VWAP, BOS/CHoCH, FVG, Order Blocks and Liquidity.
+          </div>
+          <textarea
+            value={code} onChange={e => setCode(e.target.value)}
+            placeholder={`indicator("My Strategy")\n\nplot(ta.ema(close, 200))`}
+            rows={8} style={textareaStyle}
+          />
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, cursor: "pointer", padding: "8px 16px", fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.6)" }}>Cancel</button>
-          <button onClick={handleAdd} disabled={!name.trim()} style={{ background: name.trim() ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.04)", border: `1px solid ${name.trim() ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.08)"}`, borderRadius: 8, cursor: name.trim() ? "pointer" : "default", padding: "8px 18px", fontSize: 12, fontWeight: 600, color: name.trim() ? "#22c55e" : "rgba(255,255,255,0.3)" }}>Add Indicator</button>
+          <button onClick={onClose} style={secondaryButton}>Cancel</button>
+          <button onClick={handleAdd} disabled={!name.trim()} style={{ ...primaryButton, opacity: name.trim() ? 1 : 0.4 }}>
+            Add indicator
+          </button>
         </div>
       </div>
     </AnimatedModal>
   );
 });
 
+const fieldLabel: React.CSSProperties = {
+  display: "block", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.58)",
+  marginBottom: 7, textTransform: "uppercase", letterSpacing: "0.08em",
+};
+const inputStyle: React.CSSProperties = {
+  width: "100%", boxSizing: "border-box", background: "#0a0b0e", border: "1px solid rgba(255,255,255,0.11)",
+  borderRadius: 9, padding: "10px 12px", fontSize: 12, color: "#f4f5f7", outline: "none", fontFamily: "inherit",
+};
+const textareaStyle: React.CSSProperties = {
+  ...inputStyle, resize: "vertical", fontFamily: "'JetBrains Mono', 'Fira Mono', 'Consolas', monospace", lineHeight: 1.6, minHeight: 140,
+};
+const secondaryButton: React.CSSProperties = {
+  background: "#111318", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 9, cursor: "pointer", padding: "9px 15px", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.62)",
+};
+const primaryButton: React.CSSProperties = {
+  background: "#b7ff5a", border: "1px solid rgba(183,255,90,0.45)", borderRadius: 9, cursor: "pointer", padding: "9px 16px", fontSize: 11, fontWeight: 800, color: "#07110d",
+};
+
 interface Props { anchorEl: HTMLElement | null; onClose: () => void; }
 const IndicatorsPanel = memo(function IndicatorsPanel({ anchorEl, onClose }: Props) {
   const { appliedIndicators, addIndicator, removeIndicator } = useIndicatorStore();
   const ref = useRef<HTMLDivElement>(null);
-  const [mounted, setMounted] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
@@ -80,30 +107,43 @@ const IndicatorsPanel = memo(function IndicatorsPanel({ anchorEl, onClose }: Pro
   const computePos = useCallback(() => {
     if (!anchorEl) return;
     const rect = anchorEl.getBoundingClientRect();
-    const PANEL_W = 260;
-    const left = Math.max(4, Math.min(rect.left, window.innerWidth - PANEL_W - 8));
-    setPos({ top: rect.bottom + 6, left });
+    const panelW = 286;
+    const left = Math.max(6, Math.min(rect.left, window.innerWidth - panelW - 8));
+    setPos({ top: rect.bottom + 7, left });
   }, [anchorEl]);
 
-  useEffect(() => { computePos(); const id = requestAnimationFrame(() => setMounted(true)); return () => cancelAnimationFrame(id); }, [computePos]);
+  useEffect(() => { computePos(); }, [computePos]);
   useEffect(() => {
     if (!anchorEl) return;
     window.addEventListener("scroll", computePos, { passive: true, capture: true });
     window.addEventListener("resize", computePos, { passive: true });
-    return () => { window.removeEventListener("scroll", computePos, { capture: true }); window.removeEventListener("resize", computePos); };
+    return () => {
+      window.removeEventListener("scroll", computePos, { capture: true });
+      window.removeEventListener("resize", computePos);
+    };
   }, [computePos, anchorEl]);
   useEffect(() => {
     if (!anchorEl) return;
-    const h = (e: PointerEvent) => { if (ref.current?.contains(e.target as Node)) return; if (anchorEl.contains(e.target as Node)) return; if (showCustomModal) return; onClose(); };
+    const h = (e: PointerEvent) => {
+      if (ref.current?.contains(e.target as Node)) return;
+      if (anchorEl.contains(e.target as Node)) return;
+      if (showCustomModal) return;
+      onClose();
+    };
     const id = setTimeout(() => document.addEventListener("pointerdown", h, { capture: true }), 120);
     return () => { clearTimeout(id); document.removeEventListener("pointerdown", h, { capture: true }); };
   }, [onClose, anchorEl, showCustomModal]);
 
   const handleDelete = (id: string) => {
     setDeletingIds(prev => new Set(prev).add(id));
-    setTimeout(() => { removeIndicator(id); setDeletingIds(prev => { const n = new Set(prev); n.delete(id); return n; }); }, 260);
+    setTimeout(() => {
+      removeIndicator(id);
+      setDeletingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+    }, 220);
   };
-  const handleAddCustom = (name: string, pineCode: string) => { addIndicator("CUSTOM", name, { label: name, color: "#22c55e", settings: {}, pineCode }); };
+  const handleAddCustom = (name: string, pineCode: string) => {
+    addIndicator("CUSTOM", name, { label: name, color: "#b7ff5a", settings: {}, pineCode });
+  };
   const getAppliedEma = (period: number) => appliedIndicators.find(i => i.type === "EMA" && Number(i.settings.period) === period);
   const getAppliedSma = (period: number) => appliedIndicators.find(i => i.type === "SMA" && Number(i.settings.period) === period);
   const getAppliedOther = (type: IndicatorType) => appliedIndicators.find(i => i.type === type);
@@ -117,48 +157,88 @@ const IndicatorsPanel = memo(function IndicatorsPanel({ anchorEl, onClose }: Pro
       {createPortal(
         <motion.div
           ref={ref}
-          initial={{ opacity: 1, y: fullscreen ? "100%" : -8, scale: fullscreen ? 1 : 0.98 }}
+          initial={{ opacity: 0, y: fullscreen ? "100%" : -6, scale: fullscreen ? 1 : 0.985 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 1, y: fullscreen ? "100%" : -8, scale: fullscreen ? 1 : 0.98 }}
-          transition={{ duration: fullscreen ? 0.26 : 0.15, ease: fullscreen ? [0.22, 1, 0.36, 1] : "easeOut" }}
+          exit={{ opacity: 0, y: fullscreen ? "100%" : -6, scale: fullscreen ? 1 : 0.985 }}
+          transition={{ duration: fullscreen ? 0.25 : 0.14, ease: [0.22, 1, 0.36, 1] }}
           style={{
             position: "fixed",
-            ...(fullscreen ? { inset: 0, width: "100vw", height: "100dvh", top: 0, left: 0, borderRadius: 0 } : { top: pos!.top, left: pos!.left, width: 260, borderRadius: 12 }),
-            background: fullscreen ? "#0a0c10" : "#131722",
-            border: fullscreen ? "none" : "1px solid rgba(255,255,255,0.06)",
-            boxShadow: fullscreen ? "none" : "0 12px 40px rgba(0,0,0,0.55)",
+            ...(fullscreen
+              ? { inset: 0, width: "100vw", height: "100dvh", borderRadius: 0 }
+              : { top: pos!.top, left: pos!.left, width: 286, borderRadius: 14 }),
+            background: "#050608",
+            color: "#f4f5f7",
+            border: fullscreen ? "none" : "1px solid rgba(255,255,255,0.09)",
+            boxShadow: fullscreen ? "none" : "0 18px 50px rgba(0,0,0,0.62)",
             overflow: "hidden", zIndex: 999999, pointerEvents: "auto",
             maxHeight: fullscreen ? "100dvh" : "80vh", overflowY: "auto",
+            fontFamily: "Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: fullscreen ? "0 8px" : "10px 12px 8px", height: fullscreen ? 56 : "auto", boxSizing: "border-box", borderBottom: "1px solid rgba(255,255,255,0.07)", position: "sticky", top: 0, background: fullscreen ? "#0a0c10" : "#131722", zIndex: 2, flexShrink: 0 }}>
-            <button onClick={onClose} style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 10px", borderRadius: 9, background: "transparent", border: "none", color: fullscreen ? "#60A5FA" : "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 13, fontWeight: 700, touchAction: "manipulation" }}>
-              {fullscreen && <span style={{ fontSize: 20, lineHeight: 1 }}>‹</span>}
-              {!fullscreen && <TrendingUp style={{ width: 13, height: 13, color: "#2962FF" }} />}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: fullscreen ? "0 16px" : "12px 13px", height: fullscreen ? 60 : 48,
+            boxSizing: "border-box", borderBottom: "1px solid rgba(255,255,255,0.075)",
+            position: "sticky", top: 0, background: "#050608", zIndex: 2, flexShrink: 0,
+          }}>
+            <button onClick={onClose} style={{
+              display: "flex", alignItems: "center", gap: fullscreen ? 5 : 6, padding: fullscreen ? "8px 4px" : "5px 7px",
+              borderRadius: 8, background: "transparent", border: "none", color: "#8fb7ff", cursor: "pointer",
+              fontSize: fullscreen ? 13 : 11, fontWeight: 700, touchAction: "manipulation",
+            }}>
+              {fullscreen ? <ChevronLeft style={{ width: 17, height: 17 }} /> : <TrendingUp style={{ width: 13, height: 13, color: "#8fb7ff" }} />}
               <span>{fullscreen ? "Back" : "Indicators"}</span>
             </button>
-            {fullscreen && <span style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", fontSize: 15, fontWeight: 700, color: "rgba(255,255,255,0.92)", pointerEvents: "none" }}>Indicators</span>}
-            {!fullscreen && <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 3, borderRadius: 6, display: "flex", touchAction: "manipulation" }}><X style={{ width: 12, height: 12, color: "rgba(255,255,255,0.4)" }} /></button>}
-            {fullscreen && <button onClick={onClose} style={{ padding: "7px 12px", borderRadius: 9, background: "rgba(96,165,250,0.10)", border: "1px solid rgba(96,165,250,0.28)", color: "#60A5FA", fontSize: 12, fontWeight: 700, cursor: "pointer", touchAction: "manipulation" }}>Done</button>}
+            {fullscreen && <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", fontSize: 16, fontWeight: 750, letterSpacing: "-0.02em", color: "#f4f5f7", pointerEvents: "none" }}>Indicators</div>}
+            {!fullscreen && <button onClick={onClose} aria-label="Close" style={{ background: "transparent", border: "none", cursor: "pointer", padding: 5, display: "flex" }}><X style={{ width: 14, height: 14, color: "rgba(255,255,255,0.42)" }} /></button>}
+            {fullscreen && <button onClick={onClose} style={{ padding: "8px 14px", borderRadius: 9, background: "rgba(255,255,255,0.055)", border: "1px solid rgba(255,255,255,0.11)", color: "#e8eaed", fontSize: 11, fontWeight: 750, cursor: "pointer", touchAction: "manipulation" }}>Done</button>}
           </div>
 
-          {fullscreen && <div style={{ height: 10, flexShrink: 0 }} />}
-          <SectionLabel>Moving Averages (EMA)</SectionLabel>
-          <div style={{ padding: "4px 0 4px" }}><AnimatedList>{EMA_PRESETS.map(({ period, color }) => { const ind = getAppliedEma(period); const isDeleting = ind ? deletingIds.has(ind.id) : false; return <AnimatedListItem key={period}><PresetRow color={color} label={`EMA ${period}`} applied={!!ind} isDeleting={isDeleting} onAdd={() => { addIndicator("EMA", "EMA", { color, settings: { period, source: "close", offset: 0 }, label: `EMA (${period})` }); onClose(); }} onDelete={ind ? () => handleDelete(ind.id) : undefined} /></AnimatedListItem>; })}</AnimatedList></div>
+          {fullscreen && <div style={{ height: 8 }} />}
+          <SectionLabel>Moving averages</SectionLabel>
+          <div style={{ padding: "4px 0 8px" }}>
+            <AnimatedList>{EMA_PRESETS.map(({ period, color }) => {
+              const ind = getAppliedEma(period); const deleting = ind ? deletingIds.has(ind.id) : false;
+              return <AnimatedListItem key={period}><PresetRow color={color} label={`EMA ${period}`} applied={!!ind} isDeleting={deleting} onAdd={() => { addIndicator("EMA", "EMA", { color, settings: { period, source: "close", offset: 0 }, label: `EMA (${period})` }); onClose(); }} onDelete={ind ? () => handleDelete(ind.id) : undefined} /></AnimatedListItem>;
+            })}</AnimatedList>
+          </div>
 
-          <SectionLabel>Moving Averages (SMA)</SectionLabel>
-          <div style={{ padding: "4px 0 4px" }}><AnimatedList>{SMA_PRESETS.map(({ period, color }) => { const ind = getAppliedSma(period); const isDeleting = ind ? deletingIds.has(ind.id) : false; return <AnimatedListItem key={period}><PresetRow color={color} label={`SMA ${period}`} applied={!!ind} isDeleting={isDeleting} onAdd={() => { addIndicator("SMA", "SMA", { color, settings: { period, source: "close", offset: 0 }, label: `SMA (${period})` }); onClose(); }} onDelete={ind ? () => handleDelete(ind.id) : undefined} /></AnimatedListItem>; })}</AnimatedList></div>
+          <SectionLabel>Simple moving averages</SectionLabel>
+          <div style={{ padding: "4px 0 8px" }}>
+            <AnimatedList>{SMA_PRESETS.map(({ period, color }) => {
+              const ind = getAppliedSma(period); const deleting = ind ? deletingIds.has(ind.id) : false;
+              return <AnimatedListItem key={period}><PresetRow color={color} label={`SMA ${period}`} applied={!!ind} isDeleting={deleting} onAdd={() => { addIndicator("SMA", "SMA", { color, settings: { period, source: "close", offset: 0 }, label: `SMA (${period})` }); onClose(); }} onDelete={ind ? () => handleDelete(ind.id) : undefined} /></AnimatedListItem>;
+            })}</AnimatedList>
+          </div>
 
-          <SectionLabel>Oscillators & Overlays</SectionLabel>
-          <div style={{ padding: "4px 0 4px" }}><AnimatedList>
-            {OTHER_PRESETS.map(({ type, label, color, settings }) => { const ind = getAppliedOther(type); const isDeleting = ind ? deletingIds.has(ind.id) : false; return <AnimatedListItem key={type}><PresetRow color={color} label={label} applied={!!ind} isDeleting={isDeleting} onAdd={() => { addIndicator(type, label, { color, settings, label }); onClose(); }} onDelete={ind ? () => handleDelete(ind.id) : undefined} /></AnimatedListItem>; })}
-            {(() => { const isDeleting = appliedWT ? deletingIds.has(appliedWT.id) : false; return <AnimatedListItem key="WaveTrend"><PresetRow color="#22c55e" label="WaveTrend" applied={!!appliedWT} isDeleting={isDeleting} paneBadge onAdd={() => { addIndicator("CUSTOM", "WaveTrend", { label: "WaveTrend", color: "#22c55e", settings: {}, pineCode: WAVETREND_CODE }); onClose(); }} onDelete={appliedWT ? () => handleDelete(appliedWT.id) : undefined} /></AnimatedListItem>; })()}
-          </AnimatedList></div>
+          <SectionLabel>Oscillators & overlays</SectionLabel>
+          <div style={{ padding: "4px 0 8px" }}>
+            <AnimatedList>
+              {OTHER_PRESETS.map(({ type, label, color, settings }) => {
+                const ind = getAppliedOther(type); const deleting = ind ? deletingIds.has(ind.id) : false;
+                return <AnimatedListItem key={type}><PresetRow color={color} label={label} applied={!!ind} isDeleting={deleting} onAdd={() => { addIndicator(type, label, { color, settings, label }); onClose(); }} onDelete={ind ? () => handleDelete(ind.id) : undefined} /></AnimatedListItem>;
+              })}
+              {(() => {
+                const deleting = appliedWT ? deletingIds.has(appliedWT.id) : false;
+                return <AnimatedListItem key="WaveTrend"><PresetRow color="#22c55e" label="WaveTrend" applied={!!appliedWT} isDeleting={deleting} paneBadge onAdd={() => { addIndicator("CUSTOM", "WaveTrend", { label: "WaveTrend", color: "#22c55e", settings: {}, pineCode: WAVETREND_CODE }); onClose(); }} onDelete={appliedWT ? () => handleDelete(appliedWT.id) : undefined} /></AnimatedListItem>;
+              })()}
+            </AnimatedList>
+          </div>
 
-          {customInds.length > 0 && <><SectionLabel>Custom</SectionLabel><div style={{ padding: "4px 0 4px" }}><AnimatedList>{customInds.map(ind => <AnimatedListItem key={ind.id}><PresetRow color={ind.color} label={ind.label} applied isDeleting={deletingIds.has(ind.id)} customBadge onDelete={() => handleDelete(ind.id)} /></AnimatedListItem>)}</AnimatedList></div></>}
+          {customInds.length > 0 && <>
+            <SectionLabel>Custom indicators</SectionLabel>
+            <div style={{ padding: "4px 0 8px" }}><AnimatedList>{customInds.map(ind => <AnimatedListItem key={ind.id}><PresetRow color={ind.color} label={ind.label} applied isDeleting={deletingIds.has(ind.id)} customBadge onDelete={() => handleDelete(ind.id)} /></AnimatedListItem>)}</AnimatedList></div>
+          </>}
 
-          <div style={{ padding: fullscreen ? "12px 14px 24px" : "8px 10px 10px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-            <button onClick={() => setShowCustomModal(true)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 14px", background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, cursor: "pointer", touchAction: "manipulation" }}><Plus style={{ width: 12, height: 12, color: "#22c55e" }} /><span style={{ fontSize: 12, fontWeight: 600, color: "#22c55e" }}>Add Custom Indicator</span></button>
+          <div style={{ padding: fullscreen ? "14px 16px 26px" : "9px 10px 11px", borderTop: "1px solid rgba(255,255,255,0.065)" }}>
+            <button onClick={() => setShowCustomModal(true)} style={{
+              width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+              padding: fullscreen ? "11px 14px" : "9px 12px", background: "#0a0c0f",
+              border: "1px solid rgba(183,255,90,0.30)", borderRadius: 10, cursor: "pointer", touchAction: "manipulation",
+            }}>
+              <Plus style={{ width: 13, height: 13, color: "#b7ff5a" }} />
+              <span style={{ fontSize: 11, fontWeight: 750, color: "#b7ff5a", letterSpacing: "-0.01em" }}>Add custom indicator</span>
+            </button>
           </div>
         </motion.div>, document.body
       )}
@@ -168,27 +248,41 @@ const IndicatorsPanel = memo(function IndicatorsPanel({ anchorEl, onClose }: Pro
 });
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div style={{ padding: "8px 14px 2px", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(167,184,169,0.38)", textTransform: "uppercase", borderTop: "1px solid rgba(255,255,255,0.04)" }}>{children}</div>;
+  return <div style={{
+    padding: "12px 14px 6px", fontSize: 9, fontWeight: 750, letterSpacing: "0.12em",
+    color: "rgba(255,255,255,0.38)", textTransform: "uppercase", borderTop: "1px solid rgba(255,255,255,0.045)",
+  }}>{children}</div>;
 }
 
-function PresetRow({ color, label, applied, isDeleting, onAdd, onDelete, customBadge, paneBadge }: { color: string; label: string; applied: boolean; isDeleting: boolean; onAdd?: () => void; onDelete?: () => void; customBadge?: boolean; paneBadge?: boolean; }) {
-  return <div style={{ display: "flex", alignItems: "center", opacity: isDeleting ? 0 : 1, transform: isDeleting ? "translateX(-16px)" : "none", transition: "opacity 0.25s ease, transform 0.25s ease" }}>
-    <button onClick={() => !applied && onAdd?.()} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", background: "none", border: "none", cursor: applied ? "default" : "pointer", textAlign: "left", opacity: applied ? 0.55 : 1, transition: "background 0.1s", touchAction: "manipulation" }}>
-      <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
-      <span style={{ fontSize: 12, fontWeight: 600, color: "#d1d4dc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-      {applied && !customBadge && !paneBadge && <span style={{ marginLeft: "auto", fontSize: 10, color: "rgba(255,255,255,0.3)" }}>active</span>}
-      {customBadge && <span style={{ marginLeft: "auto", fontSize: 9, color: "rgba(34,197,94,0.6)" }}>custom</span>}
-      {paneBadge && !applied && <span style={{ marginLeft: "auto", fontSize: 9, color: "rgba(56,189,248,0.65)", background: "rgba(56,189,248,0.08)", padding: "1px 5px", borderRadius: 4 }}>pane</span>}
-      {paneBadge && applied && <span style={{ marginLeft: "auto", fontSize: 10, color: "rgba(255,255,255,0.3)" }}>active</span>}
+function PresetRow({ color, label, applied, isDeleting, onAdd, onDelete, customBadge, paneBadge }: {
+  color: string; label: string; applied: boolean; isDeleting: boolean; onAdd?: () => void; onDelete?: () => void; customBadge?: boolean; paneBadge?: boolean;
+}) {
+  return <div style={{ display: "flex", alignItems: "center", opacity: isDeleting ? 0 : 1, transform: isDeleting ? "translateX(-12px)" : "none", transition: "opacity .22s ease, transform .22s ease" }}>
+    <button
+      onClick={() => !applied && onAdd?.()}
+      style={{
+        flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 11, padding: "9px 14px",
+        background: applied ? "rgba(255,255,255,0.018)" : "transparent", border: "none", cursor: applied ? "default" : "pointer",
+        textAlign: "left", borderRadius: 8, opacity: applied ? 0.58 : 1, transition: "background .12s, opacity .12s", touchAction: "manipulation",
+      }}
+    >
+      <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0, boxShadow: `0 0 8px ${color}35` }} />
+      <span style={{ fontSize: 13, fontWeight: 650, color: "#e7e9ed", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>{label}</span>
+      {applied && !customBadge && !paneBadge && <span style={statusStyle}>Active</span>}
+      {customBadge && <span style={{ ...statusStyle, color: "rgba(183,255,90,0.72)" }}>Custom</span>}
+      {paneBadge && !applied && <span style={{ ...statusStyle, color: "rgba(103,202,255,0.72)", background: "rgba(56,189,248,0.08)" }}>Pane</span>}
+      {paneBadge && applied && <span style={statusStyle}>Active</span>}
     </button>
-    {applied && onDelete && <button onClick={onDelete} title="Remove" style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 12px 6px 4px", display: "flex", alignItems: "center", touchAction: "manipulation", flexShrink: 0, color: "rgba(255,255,255,0.25)" }}><Trash2 style={{ width: 12, height: 12, color: "inherit" }} /></button>}
+    {applied && onDelete && <button onClick={onDelete} title="Remove indicator" aria-label={`Remove ${label}`} style={{ background: "transparent", border: "none", cursor: "pointer", padding: "7px 12px 7px 4px", display: "flex", alignItems: "center", color: "rgba(255,255,255,0.28)", flexShrink: 0 }}><Trash2 style={{ width: 13, height: 13 }} /></button>}
   </div>;
 }
 
+const statusStyle: React.CSSProperties = {
+  marginLeft: "auto", fontSize: 9, fontWeight: 650, color: "rgba(255,255,255,0.34)",
+  background: "rgba(255,255,255,0.045)", padding: "3px 6px", borderRadius: 5, letterSpacing: "0.02em",
+};
+
 // ── Direct mobile launcher ───────────────────────────────────────────────────
-// The existing mobile control bar has a stable class. Mount a small React root
-// into that bar so the indicator button is immediately to the right of Tools,
-// while keeping the chart component tree untouched.
 const launcherRoots = new WeakMap<HTMLElement, Root>();
 
 function MobileIndicatorsLauncher() {
@@ -210,7 +304,6 @@ function MobileIndicatorsLauncher() {
 function mountLauncher(bar: HTMLElement) {
   if (bar.dataset.indicatorsLauncherMounted === "1") return;
   const buttons = Array.from(bar.querySelectorAll("button"));
-  // Current MiniControlBar order: Symbol, TF, Trade, Tools, Broker, More, Prev, Next, Fullscreen.
   const brokerButton = buttons[4];
   if (!brokerButton) return;
   const host = document.createElement("span");
