@@ -18,6 +18,12 @@ function toLineStyle(s: string): LineStyle {
   return LineStyle.Solid;
 }
 
+function getSettingsKey(ind: AppliedIndicator): string {
+  // Indicator settings are part of the calculation identity.
+  // Without this, changing EMA 20 -> 50 could incorrectly reuse the old cached points.
+  return `${ind.type}:${JSON.stringify(ind.settings ?? {})}`;
+}
+
 function buildPoints(bars: OHLCBar[], ind: AppliedIndicator): { time: Time; value: number }[] {
   if (!bars.length) return [];
   const closes = bars.map(b => b.close);
@@ -75,53 +81,58 @@ export default function IndicatorRenderer() {
 
   const seriesMapRef = useRef<Map<string, SeriesEntry>>(new Map());
 
-  // Stable memoized array — only recomputes when appliedIndicators identity changes
-  // This is critical: without useMemo, a new array ref is created every render,
-  // which makes the sync useEffect run on every render → infinite loop / freeze.
   const builtinInds = useMemo(
     () => appliedIndicators.filter(i => i.type !== "CUSTOM"),
     [appliedIndicators],
   );
 
-  // Keep a ref for use inside WS callback (avoids stale closure)
   const indicatorsRef = useRef(builtinInds);
   indicatorsRef.current = builtinInds;
 
-  // Per-indicator point cache.
-  // Validity is checked via bar count AND first/last bar timestamps so that
-  // stale replay-slice points are never served when live data happens to have
-  // the same bar count as the last replay slice.
+  // Cache is keyed by indicator id, but its validity also includes settings.
+  // This guarantees EMA/SMA/RSI period changes always recalculate the line.
   const pointCacheRef = useRef<Map<string, {
-    barsLen:   number;
+    barsLen: number;
     firstTime: number;
-    lastTime:  number;
+    lastTime: number;
+    settingsKey: string;
     pts: { time: Time; value: number }[];
   }>>(new Map());
 
   const getPoints = useCallback((bars: OHLCBar[], ind: AppliedIndicator) => {
-    const cacheKey  = ind.id;
-    const cached    = pointCacheRef.current.get(cacheKey);
+    const cacheKey = ind.id;
+    const cached = pointCacheRef.current.get(cacheKey);
     const firstTime = (bars[0]?.time ?? 0) as number;
-    const lastTime  = (bars[bars.length - 1]?.time ?? 0) as number;
+    const lastTime = (bars[bars.length - 1]?.time ?? 0) as number;
+    const settingsKey = getSettingsKey(ind);
+
     if (
       cached &&
-      cached.barsLen   === bars.length &&
-      cached.firstTime === firstTime   &&
-      cached.lastTime  === lastTime
-    ) return cached.pts;
+      cached.barsLen === bars.length &&
+      cached.firstTime === firstTime &&
+      cached.lastTime === lastTime &&
+      cached.settingsKey === settingsKey
+    ) {
+      return cached.pts;
+    }
+
     const pts = buildPoints(bars, ind);
-    pointCacheRef.current.set(cacheKey, { barsLen: bars.length, firstTime, lastTime, pts });
+    pointCacheRef.current.set(cacheKey, {
+      barsLen: bars.length,
+      firstTime,
+      lastTime,
+      settingsKey,
+      pts,
+    });
     return pts;
   }, []);
 
-  // Sync series to chart whenever indicators list or bars change
   useEffect(() => {
     if (!chart || !barsLoaded) return;
     const bars = barsRef.current;
     if (!bars.length) return;
     const map = seriesMapRef.current;
 
-    // Remove series for deleted indicators
     const currentIds = new Set(builtinInds.map(i => i.id));
     for (const [id, entry] of map) {
       if (!currentIds.has(id)) {
@@ -131,25 +142,26 @@ export default function IndicatorRenderer() {
       }
     }
 
-    // Add / update series
     const firstTime = (bars[0]?.time ?? 0) as number;
-    const lastTime  = (bars[bars.length - 1]?.time ?? 0) as number;
+    const lastTime = (bars[bars.length - 1]?.time ?? 0) as number;
+
     for (const ind of builtinInds) {
-      // Check cache BEFORE calling getPoints (which mutates the cache).
-      // Validate by bar count AND timestamps so stale replay-slice data is never
-      // reused when live data coincidentally has the same number of bars.
       const prevCached = pointCacheRef.current.get(ind.id);
+      const settingsKey = getSettingsKey(ind);
       const dataChanged = !prevCached
-        || prevCached.barsLen   !== bars.length
+        || prevCached.barsLen !== bars.length
         || prevCached.firstTime !== firstTime
-        || prevCached.lastTime  !== lastTime;
+        || prevCached.lastTime !== lastTime
+        || prevCached.settingsKey !== settingsKey;
+
       const pts = getPoints(bars, ind);
       const existing = map.get(ind.id);
+
       if (existing) {
         try {
           existing.series.applyOptions({
-            visible:   ind.visible,
-            color:     ind.color,
+            visible: ind.visible,
+            color: ind.color,
             lineWidth: (ind.lineWidth || 1) as 1 | 2 | 3 | 4,
             lineStyle: toLineStyle(ind.lineStyle),
           });
@@ -160,13 +172,13 @@ export default function IndicatorRenderer() {
       } else {
         try {
           const s = chart.addSeries(LineSeries, {
-            color:                  ind.color,
-            lineWidth:              (ind.lineWidth || 1) as 1 | 2 | 3 | 4,
-            lineStyle:              toLineStyle(ind.lineStyle),
-            visible:                ind.visible,
-            priceLineVisible:       false,
+            color: ind.color,
+            lineWidth: (ind.lineWidth || 1) as 1 | 2 | 3 | 4,
+            lineStyle: toLineStyle(ind.lineStyle),
+            visible: ind.visible,
+            priceLineVisible: false,
             crosshairMarkerVisible: false,
-            lastValueVisible:       false,
+            lastValueVisible: false,
           }, 0);
           s.setData(pts as never[]);
           map.set(ind.id, { series: s });
@@ -175,7 +187,6 @@ export default function IndicatorRenderer() {
     }
   }, [chart, barsLoaded, builtinInds, barsRef, getPoints, replayBarCount]);
 
-  // Live tick updates — only update the last point, never recalculate full series
   useEffect(() => {
     return subscribeToMessages((msg: unknown) => {
       if (!chart) return;
@@ -190,7 +201,6 @@ export default function IndicatorRenderer() {
         const entry = map.get(ind.id);
         if (!entry) continue;
         try {
-          // Invalidate cache for this indicator so next full sync uses fresh data
           pointCacheRef.current.delete(ind.id);
           const pts = buildPoints(bars, ind);
           const last = pts[pts.length - 1];
@@ -200,12 +210,6 @@ export default function IndicatorRenderer() {
     });
   }, [chart, subscribeToMessages, barsRef]);
 
-  // Lock all indicator series to the same vertical pan range as the candlestick.
-  // LWC unions autoscaleInfoProvider results across all pane-0 series; if EMA/SMA
-  // don't return the same locked range, the price scale expands to include their
-  // natural data range and vertical pan feels "limited". We install a live provider
-  // that reads getPanRange() dynamically — the main series' per-frame applyOptions
-  // triggers LWC to re-call all providers, picking up the updated value.
   useEffect(() => {
     return subscribePanRange((range) => {
       for (const entry of seriesMapRef.current.values()) {
@@ -223,9 +227,8 @@ export default function IndicatorRenderer() {
         } catch { /**/ }
       }
     });
-  }, []); // module-level subscribePanRange needs no deps
+  }, []);
 
-  // Cleanup all series on unmount
   useEffect(() => {
     return () => {
       if (!chart) return;
