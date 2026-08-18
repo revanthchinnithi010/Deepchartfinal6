@@ -63,11 +63,29 @@ function MoreMenu({ indicator, anchor, onClose, onDelete, onShowPine, onDuplicat
 function IndicatorTag({ indicator, onToggleVisible, onDelete }: { indicator: AppliedIndicator; onToggleVisible: () => void; onDelete: () => void; }) {
   const { duplicateIndicator } = useIndicatorStore();
   const [hovered, setHovered] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [showPine, setShowPine] = useState(false);
   const moreRef = useRef<HTMLButtonElement>(null);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; left: number } | null>(null);
-  const handleMore = () => { const rect = moreRef.current?.getBoundingClientRect(); if (rect) { setMenuAnchor({ top: rect.bottom + 4, left: rect.left }); setShowMore(true); } };
+
+  useEffect(() => {
+    const media = window.matchMedia("(hover: none), (pointer: coarse)");
+    const update = () => setIsTouchDevice(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+
+  const handleMore = () => {
+    const rect = moreRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMenuAnchor({ top: rect.bottom + 4, left: rect.left });
+      setShowMore(true);
+    }
+  };
+
+  const controlsVisible = isTouchDevice || hovered;
 
   return <>
     <div style={{
@@ -80,7 +98,7 @@ function IndicatorTag({ indicator, onToggleVisible, onDelete }: { indicator: App
       <div style={{ width: 9, height: 9, borderRadius: "50%", background: indicator.color, flexShrink: 0, marginRight: 7, opacity: indicator.visible ? 1 : 0.3, boxShadow: indicator.visible ? `0 0 5px ${indicator.color}88` : "none" }} />
       <span style={{ fontSize: 14, fontWeight: 600, color: indicator.visible ? "rgba(235,240,236,0.95)" : "rgba(235,240,236,0.3)", whiteSpace: "nowrap", lineHeight: 1.1 }}>{indicator.label}</span>
       {indicator.type === "CUSTOM" && <span style={{ fontSize: 10, color: "#B7FF5A", marginLeft: 5, opacity: 0.65, fontWeight: 700 }}>custom</span>}
-      {hovered && <div style={{ display: "flex", alignItems: "center", marginLeft: 6 }}>
+      {controlsVisible && <div style={{ display: "flex", alignItems: "center", marginLeft: 6 }}>
         <IconBtn title={indicator.visible ? "Hide" : "Show"} onClick={onToggleVisible}>{indicator.visible ? <Eye style={{ width: 16, height: 16 }} /> : <EyeOff style={{ width: 16, height: 16 }} />}</IconBtn>
         <IconBtn title="Settings" onClick={() => {}}><Settings style={{ width: 16, height: 16 }} /></IconBtn>
         <IconBtn title="Remove" onClick={onDelete}><Trash2 style={{ width: 16, height: 16 }} /></IconBtn>
@@ -96,9 +114,9 @@ function IndicatorTag({ indicator, onToggleVisible, onDelete }: { indicator: App
 function IconBtn({ title, onClick, children, ref }: { title: string; onClick: () => void; children: React.ReactNode; ref?: React.Ref<HTMLButtonElement>; }) {
   return <button ref={ref} title={title} onClick={e => { e.stopPropagation(); onClick(); }} style={{
     background: "none", border: "none", cursor: "pointer", padding: "5px 6px", borderRadius: 5,
-    display: "flex", alignItems: "center", color: "rgba(220,225,222,0.75)",
+    display: "flex", alignItems: "center", color: "rgba(220,225,222,0.9)",
     minWidth: 30, minHeight: 30, justifyContent: "center"
-  }} onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#ffffff"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"; }} onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(220,225,222,0.75)"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>{children}</button>;
+  }} onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#ffffff"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"; }} onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(220,225,222,0.9)"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>{children}</button>;
 }
 
 export default IndicatorTags;
