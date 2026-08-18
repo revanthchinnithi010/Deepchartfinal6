@@ -12,18 +12,18 @@ const IndicatorTags = memo(function IndicatorTags({ topOffset = 8 }: { topOffset
   return (
     <div style={{
       position: "absolute", top: topOffset, left: 8, zIndex: 20,
-      display: "flex", flexDirection: "column", gap: 2,
+      display: "flex", flexDirection: "column", gap: 3,
       pointerEvents: "all",
     }}>
       {/* Compact collapse control — arrow only, like TradingView */}
-      <div style={{ display: "flex", alignItems: "center", height: 16, marginBottom: collapsed ? 0 : 1 }}>
+      <div style={{ display: "flex", alignItems: "center", height: 18, marginBottom: collapsed ? 0 : 2 }}>
         <button
           title={collapsed ? "Show indicators" : "Hide indicators"}
           aria-label={collapsed ? "Show indicators" : "Hide indicators"}
           onClick={() => setCollapsed(c => !c)}
           style={{
             display: "flex", alignItems: "center", justifyContent: "center",
-            width: 18, height: 16, padding: 0,
+            width: 20, height: 18, padding: 0,
             background: "rgba(0,0,0,0.48)",
             border: "1px solid rgba(255,255,255,0.06)",
             borderRadius: 4,
@@ -44,8 +44,8 @@ const IndicatorTags = memo(function IndicatorTags({ topOffset = 8 }: { topOffset
           }}
         >
           {collapsed
-            ? <ChevronDown style={{ width: 11, height: 11 }} />
-            : <ChevronUp style={{ width: 11, height: 11 }} />
+            ? <ChevronDown style={{ width: 12, height: 12 }} />
+            : <ChevronUp style={{ width: 12, height: 12 }} />
           }
         </button>
       </div>
@@ -137,12 +137,12 @@ function MoreMenu({ indicator, anchor, onClose, onDelete, onShowPine, onDuplicat
   }, [onClose]);
 
   const items = [
-    { icon: <Eye style={{ width: 12, height: 12 }} />, label: "Toggle visibility", action: () => { onClose(); } },
-    { icon: <Copy style={{ width: 12, height: 12 }} />, label: "Duplicate", action: () => { onDuplicate(); onClose(); } },
+    { icon: <Eye style={{ width: 14, height: 14 }} />, label: "Toggle visibility", action: () => { onClose(); } },
+    { icon: <Copy style={{ width: 14, height: 14 }} />, label: "Duplicate", action: () => { onDuplicate(); onClose(); } },
     ...(indicator.type === "CUSTOM" ? [
-      { icon: <Code2 style={{ width: 12, height: 12 }} />, label: "Show PineScript", action: () => { onShowPine(); onClose(); } },
+      { icon: <Code2 style={{ width: 14, height: 14 }} />, label: "Show PineScript", action: () => { onShowPine(); onClose(); } },
     ] : []),
-    { icon: <Trash2 style={{ width: 12, height: 12, color: "#f87171" }} />, label: "Remove", action: () => { onDelete(); onClose(); }, danger: true },
+    { icon: <Trash2 style={{ width: 14, height: 14, color: "#f87171" }} />, label: "Remove", action: () => { onDelete(); onClose(); }, danger: true },
   ];
 
   return createPortal(
@@ -158,11 +158,11 @@ function MoreMenu({ indicator, anchor, onClose, onDelete, onShowPine, onDuplicat
     }}>
       {items.map((item, i) => (
         <button key={i} onClick={item.action} style={{
-          width: "100%", display: "flex", alignItems: "center", gap: 8,
-          padding: "9px 13px", background: "none", border: "none",
+          width: "100%", display: "flex", alignItems: "center", gap: 9,
+          padding: "10px 13px", background: "none", border: "none",
           cursor: "pointer", textAlign: "left",
           color: item.danger ? "#f87171" : "rgba(200,228,204,0.85)",
-          fontSize: 12, fontWeight: 500,
+          fontSize: 13, fontWeight: 500,
         }}
           onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(183,255,90,0.07)"}
           onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = "transparent"}
@@ -200,49 +200,49 @@ function IndicatorTag({ indicator, onToggleVisible, onDelete }: {
     <>
       <div
         style={{
-          display: "flex", alignItems: "center", gap: 2,
-          height: 28,
+          display: "flex", alignItems: "center", gap: 3,
+          minHeight: 34,
           background: hovered ? "rgba(0,0,0,0.64)" : "rgba(0,0,0,0.48)",
           border: "1px solid rgba(0,0,0,0.18)",
-          borderRadius: 6,
+          borderRadius: 7,
           backdropFilter: "blur(8px)",
           WebkitBackdropFilter: "blur(8px)",
           transition: "background 0.15s",
-          paddingLeft: 8, paddingRight: 4,
+          paddingLeft: 9, paddingRight: 5,
           userSelect: "none",
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
         <div style={{
-          width: 8, height: 8, borderRadius: "50%",
-          background: indicator.color, flexShrink: 0, marginRight: 6,
+          width: 9, height: 9, borderRadius: "50%",
+          background: indicator.color, flexShrink: 0, marginRight: 7,
           opacity: indicator.visible ? 1 : 0.3,
-          boxShadow: indicator.visible ? `0 0 4px ${indicator.color}88` : "none",
+          boxShadow: indicator.visible ? `0 0 5px ${indicator.color}88` : "none",
         }} />
         <span style={{
-          fontSize: 12, fontWeight: 600,
+          fontSize: 14, fontWeight: 600,
           color: indicator.visible ? "rgba(235,240,236,0.95)" : "rgba(235,240,236,0.3)",
-          whiteSpace: "nowrap", lineHeight: 1,
+          whiteSpace: "nowrap", lineHeight: 1.1,
         }}>
           {indicator.label}
         </span>
         {indicator.type === "CUSTOM" && (
-          <span style={{ fontSize: 9, color: "#B7FF5A", marginLeft: 5, opacity: 0.65, fontWeight: 700, letterSpacing: "0.03em" }}>custom</span>
+          <span style={{ fontSize: 10, color: "#B7FF5A", marginLeft: 5, opacity: 0.65, fontWeight: 700, letterSpacing: "0.03em" }}>custom</span>
         )}
         {hovered && (
-          <div style={{ display: "flex", alignItems: "center", marginLeft: 5 }}>
+          <div style={{ display: "flex", alignItems: "center", marginLeft: 6 }}>
             <IconBtn title={indicator.visible ? "Hide" : "Show"} onClick={onToggleVisible}>
-              {indicator.visible ? <Eye style={{ width: 12, height: 12 }} /> : <EyeOff style={{ width: 12, height: 12 }} />}
+              {indicator.visible ? <Eye style={{ width: 16, height: 16 }} /> : <EyeOff style={{ width: 16, height: 16 }} />}
             </IconBtn>
             <IconBtn title="Settings" onClick={() => {}}>
-              <Settings style={{ width: 12, height: 12 }} />
+              <Settings style={{ width: 16, height: 16 }} />
             </IconBtn>
             <IconBtn title="Remove" onClick={onDelete}>
-              <Trash2 style={{ width: 12, height: 12 }} />
+              <Trash2 style={{ width: 16, height: 16 }} />
             </IconBtn>
             <IconBtn ref={moreRef} title="More" onClick={handleMore}>
-              <MoreHorizontal style={{ width: 12, height: 12 }} />
+              <MoreHorizontal style={{ width: 16, height: 16 }} />
             </IconBtn>
           </div>
         )}
@@ -281,15 +281,16 @@ function IconBtn({ title, onClick, children, ref }: {
       onClick={e => { e.stopPropagation(); onClick(); }}
       style={{
         background: "none", border: "none", cursor: "pointer",
-        padding: "3px 5px", borderRadius: 4, display: "flex", alignItems: "center",
-        color: "rgba(220,225,222,0.55)",
+        padding: "5px 6px", borderRadius: 5, display: "flex", alignItems: "center",
+        color: "rgba(220,225,222,0.65)",
+        minWidth: 28, minHeight: 28, justifyContent: "center",
       }}
       onMouseEnter={e => {
         (e.currentTarget as HTMLButtonElement).style.color = "#ffffff";
         (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)";
       }}
       onMouseLeave={e => {
-        (e.currentTarget as HTMLButtonElement).style.color = "rgba(220,225,222,0.55)";
+        (e.currentTarget as HTMLButtonElement).style.color = "rgba(220,225,222,0.65)";
         (e.currentTarget as HTMLButtonElement).style.background = "transparent";
       }}
     >
