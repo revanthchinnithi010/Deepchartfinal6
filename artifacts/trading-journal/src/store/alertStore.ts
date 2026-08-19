@@ -206,7 +206,7 @@ function drawingMatchesTriggeredAlert(drawing: any, alert: AnyAlert): boolean {
     const direct = closePrice(p0?.price, alert.point1Price) && closePrice(p1?.price, alert.point2Price)
       && closeTime(p0?.time, alert.point1Time) && closeTime(p1?.time, alert.point2Time);
     const reverse = closePrice(p0?.price, alert.point2Price) && closePrice(p1?.price, alert.point1Price)
-      && closeTime(p0?.time, alert.point2Time) && closeTime(p1?.time, alert.point1Time);
+      && closeTime(p0?.time, alert.point2Time) && closeTime(p1?.point1Time);
     return direct || reverse;
   }
 
@@ -228,7 +228,6 @@ function markTriggeredDrawingsRed(alerts: AnyAlert[]) {
   const persistedIds = loadTriggeredDrawingIds();
   const drawings = useDrawingStore.getState().drawings;
 
-  // Previously triggered drawings remain red even if their alert is later deleted.
   for (const drawing of drawings) {
     if (persistedIds.has(drawing.id) && drawing.style.color !== TRIGGERED_DRAWING_COLOR) {
       useDrawingStore.getState().updateDrawing(drawing.id, {
@@ -336,6 +335,9 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
 }));
 
 if (typeof window !== "undefined") {
+  window.addEventListener("tj:drawings-changed", () => {
+    markTriggeredDrawingsRed(useAlertStore.getState().alerts);
+  });
   queueMicrotask(() => {
     markTriggeredDrawingsRed(loadLocal());
     void useAlertStore.getState().hydrateFromApi();
