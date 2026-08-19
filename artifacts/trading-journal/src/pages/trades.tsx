@@ -63,8 +63,6 @@ const tradeSchema = z.object({
 
 type TradeFormValues = z.infer<typeof tradeSchema>;
 
-type ModalTab = "details" | "analysis";
-
 function MultiSelectChips({
   options,
   value,
@@ -667,8 +665,6 @@ interface AddTradeSheetProps {
 const AddTradeSheet = memo(function AddTradeSheet({
   open, onClose, form, onSubmit, isPending,
 }: AddTradeSheetProps) {
-  const [modalTab, setModalTab] = useState<ModalTab>("details");
-
   // Scoped watch — updates only re-render this component, not the trade list
   const watchedSymbol  = form.watch("symbol");
   const watchedSide    = form.watch("side");
@@ -676,10 +672,6 @@ const AddTradeSheet = memo(function AddTradeSheet({
   const setupTagsVal   = form.watch("setupTags") ?? "";
   const mistakeTagsVal = form.watch("mistakeTags") ?? "";
 
-  // Reset tab every time the sheet is opened
-  useEffect(() => {
-    if (open) setModalTab("details");
-  }, [open]);
 
   const tagCount =
     setupTagsVal.split(",").filter(Boolean).length +
@@ -740,42 +732,12 @@ const AddTradeSheet = memo(function AddTradeSheet({
           </span>
         </div>
 
-        {/* Step indicator */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px 0", flexShrink: 0 }}>
-          {(["details", "analysis"] as ModalTab[]).map((tab, i) => (
-            <div key={tab} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{
-                display: "flex", alignItems: "center", gap: 6,
-                opacity: modalTab === tab ? 1 : 0.35,
-                transition: "opacity 0.2s",
-              }}>
-                <div style={{
-                  width: 20, height: 20, borderRadius: "50%",
-                  background: modalTab === tab ? "hsl(var(--primary))" : "rgba(255,255,255,0.12)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 10, fontWeight: 700,
-                  color: modalTab === tab ? "#fff" : "rgba(255,255,255,0.5)",
-                  transition: "background 0.2s",
-                }}>
-                  {i + 1}
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 600, color: modalTab === tab ? "#f1f5f9" : "rgba(148,163,184,0.6)" }}>
-                  {tab === "details" ? "Trade Details" : "Analysis & Tags"}
-                </span>
-              </div>
-              {i === 0 && (
-                <div style={{ width: 24, height: 1, background: "rgba(255,255,255,0.10)" }} />
-              )}
-            </div>
-          ))}
-        </div>
-
         {/* Scrollable Form Body */}
         <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "18px 18px 8px", WebkitOverflowScrolling: "touch" as any }}>
           <Form {...form}>
             <form id="tradeForm" onSubmit={form.handleSubmit(onSubmit)}>
-              <AnimatePresence mode="wait" initial={false}>
-                {modalTab === "details" && (
+              <div className="space-y-5">
+                {true && (
                   <motion.div
                     key="details"
                     initial={{ x: "-100%", opacity: 0 }}
@@ -901,10 +863,10 @@ const AddTradeSheet = memo(function AddTradeSheet({
                         </FormItem>
                       )} />
                     </div>
-                  </motion.div>
+                  </div>
                 )}
 
-                {modalTab === "analysis" && (
+                {true && (
                   <motion.div
                     key="analysis"
                     initial={{ x: "100%", opacity: 0 }}
@@ -989,9 +951,9 @@ const AddTradeSheet = memo(function AddTradeSheet({
                         <FormMessage />
                       </FormItem>
                     )} />
-                  </motion.div>
+                  </div>
                 )}
-              </AnimatePresence>
+              </div>
             </form>
           </Form>
         </div>
@@ -1003,62 +965,20 @@ const AddTradeSheet = memo(function AddTradeSheet({
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{
-              display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: 8,
-              fontSize: 11, fontWeight: 700,
-              background: watchedSide === "long" ? "rgba(96,165,250,0.12)" : "rgba(249,115,22,0.12)",
-              color:      watchedSide === "long" ? "#60a5fa"               : "#f97316",
-            }}>
-              {watchedSide?.toUpperCase()}
-            </span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{watchedSymbol}</span>
-            {modalTab === "analysis" && tagCount > 0 && (
-              <span style={{ fontSize: 11, color: "rgba(148,163,184,0.55)" }}>
-                · {tagCount} tag{tagCount !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {modalTab === "details" ? (
-              <button
-                type="button"
-                onClick={() => setModalTab("analysis")}
-                style={{
-                  padding: "0 20px", height: 40, borderRadius: 12,
-                  background: "linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(220,228,255,0.92) 50%, rgba(255,255,255,0.88) 100%)",
-                  border: "1.5px solid rgba(255,255,255,0.85)",
-                  color: "#0a0a0f", fontSize: 13.5, fontWeight: 700,
-                  boxShadow: "0 2px 12px rgba(255,255,255,0.18), inset 0 1px 0 rgba(255,255,255,1)",
-                  cursor: "pointer",
-                }}
-              >
-                Next →
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setModalTab("details")}
-                  style={{ padding: "0 16px", height: 40, borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", color: "rgba(148,163,184,0.8)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-                >
-                  ← Back
-                </button>
-                <button
-                  type="submit" form="tradeForm" disabled={isPending}
-                  style={{
-                    padding: "0 20px", height: 40, borderRadius: 12,
-                    background: "linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(220,228,255,0.92) 50%, rgba(255,255,255,0.88) 100%)",
-                    border: "1.5px solid rgba(255,255,255,0.85)",
-                    color: "#0a0a0f", fontSize: 13.5, fontWeight: 700,
-                    boxShadow: "0 2px 12px rgba(255,255,255,0.18), inset 0 1px 0 rgba(255,255,255,1)",
-                    cursor: isPending ? "not-allowed" : "pointer",
-                    opacity: isPending ? 0.5 : 1,
-                  }}
-                >
-                  {isPending ? "Saving..." : "Save Trade"}
-                </button>
-              </>
-            )}
+            <button
+              type="submit" form="tradeForm" disabled={isPending}
+              style={{
+                padding: "0 20px", height: 40, borderRadius: 12,
+                background: "linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(220,228,255,0.92) 50%, rgba(255,255,255,0.88) 100%)",
+                border: "1.5px solid rgba(255,255,255,0.85)",
+                color: "#0a0a0f", fontSize: 13.5, fontWeight: 700,
+                boxShadow: "0 2px 12px rgba(255,255,255,0.18), inset 0 1px 0 rgba(255,255,255,1)",
+                cursor: isPending ? "not-allowed" : "pointer",
+                opacity: isPending ? 0.5 : 1,
+              }}
+            >
+              {isPending ? "Saving..." : "Save Trade"}
+            </button>
           </div>
         </div>
       </div>
