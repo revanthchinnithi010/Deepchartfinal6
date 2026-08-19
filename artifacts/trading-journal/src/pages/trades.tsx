@@ -23,7 +23,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   BROKER_MAP,
   ALL_SYMBOLS,
@@ -965,21 +965,35 @@ const AddTradeSheet = memo(function AddTradeSheet({
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              type="submit" form="tradeForm" disabled={isPending}
-              style={{
-                padding: "0 20px", height: 40, borderRadius: 12,
-                background: "linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(220,228,255,0.92) 50%, rgba(255,255,255,0.88) 100%)",
-                border: "1.5px solid rgba(255,255,255,0.85)",
-                color: "#0a0a0f", fontSize: 13.5, fontWeight: 700,
-                boxShadow: "0 2px 12px rgba(255,255,255,0.18), inset 0 1px 0 rgba(255,255,255,1)",
-                cursor: isPending ? "not-allowed" : "pointer",
-                opacity: isPending ? 0.5 : 1,
-              }}
-            >
-              {isPending ? "Saving..." : "Save Trade"}
-            </button>
+            <span style={{
+              display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: 8,
+              fontSize: 11, fontWeight: 700,
+              background: watchedSide === "long" ? "rgba(96,165,250,0.12)" : "rgba(249,115,22,0.12)",
+              color: watchedSide === "long" ? "#60a5fa" : "#f97316",
+            }}>
+              {watchedSide?.toUpperCase()}
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{watchedSymbol}</span>
+            {tagCount > 0 && (
+              <span style={{ fontSize: 11, color: "rgba(148,163,184,0.55)" }}>
+                · {tagCount} tag{tagCount !== 1 ? "s" : ""}
+              </span>
+            )}
           </div>
+          <button
+            type="submit" form="tradeForm" disabled={isPending}
+            style={{
+              padding: "0 20px", height: 40, borderRadius: 12,
+              background: "linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(220,228,255,0.92) 50%, rgba(255,255,255,0.88) 100%)",
+              border: "1.5px solid rgba(255,255,255,0.85)",
+              color: "#0a0a0f", fontSize: 13.5, fontWeight: 700,
+              boxShadow: "0 2px 12px rgba(255,255,255,0.18), inset 0 1px 0 rgba(255,255,255,1)",
+              cursor: isPending ? "not-allowed" : "pointer",
+              opacity: isPending ? 0.5 : 1,
+            }}
+          >
+            {isPending ? "Saving..." : "Save Trade"}
+          </button>
         </div>
       </div>
     </>,
