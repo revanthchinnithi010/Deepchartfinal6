@@ -12,7 +12,7 @@ if (!s.includes('import { useWatchlist } from "@/contexts/WatchlistContext";')) 
 if (!s.includes('const { items: watchlistItems')) {
   const marker = '  const [modalTab, setModalTab] = useState<ModalTab>("details");';
   if (!s.includes(marker)) throw new Error("AddTradeSheet state marker not found");
-  s = s.replace(marker, `${marker}\n\n  // Asset choices come only from the user's live Markets → Watchlist.\n  const { items: watchlistItems, loading: watchlistLoading, refresh: refreshWatchlist } = useWatchlist();\n  const [assetPickerOpen, setAssetPickerOpen] = useState(false);\n  const [assetPickerLoading, setAssetPickerLoading] = useState(false);\n  const openAssetPicker = async () => {\n    setAssetPickerOpen(true);\n    setAssetPickerLoading(true);\n    try {\n      await refreshWatchlist();\n    } finally {\n      setAssetPickerLoading(false);\n    }\n  };`);
+  s = s.replace(marker, `${marker}\n\n  // Asset choices come only from the user's live Markets → Watchlist favorites.\n  const { items: watchlistItems, loading: watchlistLoading, refresh: refreshWatchlist } = useWatchlist();\n  const [assetPickerOpen, setAssetPickerOpen] = useState(false);\n  const [assetPickerLoading, setAssetPickerLoading] = useState(false);\n  const openAssetPicker = async () => {\n    setAssetPickerOpen(true);\n    setAssetPickerLoading(true);\n    try {\n      await refreshWatchlist();\n    } finally {\n      setAssetPickerLoading(false);\n    }\n  };`);
 } else if (!s.includes('refresh: refreshWatchlist')) {
   s = s.replace(
     'const { items: watchlistItems, loading: watchlistLoading } = useWatchlist();\n  const [assetPickerOpen, setAssetPickerOpen] = useState(false);',
@@ -58,10 +58,10 @@ const replacement = `                    {/* Asset + Direction — TradingView-s
                                 <div className="overflow-y-auto max-h-[calc(72vh-64px)] p-2">
                                   {(assetPickerLoading || watchlistLoading) ? (
                                     <div className="px-3 py-8 text-center text-[12px] text-white/45">Refreshing Markets watchlist…</div>
-                                  ) : watchlistItems.length === 0 ? (
-                                    <div className="px-3 py-8 text-center text-[12px] text-white/45">No symbols in your watchlist</div>
+                                  ) : watchlistItems.filter(item => item.isFavorite).length === 0 ? (
+                                    <div className="px-3 py-8 text-center text-[12px] text-white/45">No symbols in your Markets watchlist</div>
                                   ) : (
-                                    watchlistItems.map(item => (
+                                    watchlistItems.filter(item => item.isFavorite).map(item => (
                                       <button
                                         key={item.id}
                                         type="button"
@@ -108,4 +108,4 @@ s = s.replace(
 );
 
 fs.writeFileSync(path, s);
-console.log("Add Trade asset picker now refreshes the same Markets watchlist before showing symbols");
+console.log("Add Trade asset picker now uses only actual Markets → Watchlist favorites");
