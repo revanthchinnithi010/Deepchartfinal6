@@ -12,7 +12,12 @@ if (!s.includes('import { useWatchlist } from "@/contexts/WatchlistContext";')) 
 if (!s.includes('const { items: watchlistItems')) {
   const marker = '  const [modalTab, setModalTab] = useState<ModalTab>("details");';
   if (!s.includes(marker)) throw new Error("AddTradeSheet state marker not found");
-  s = s.replace(marker, `${marker}\n\n  // Asset choices come only from the user's live Markets → Watchlist.\n  const { items: watchlistItems, loading: watchlistLoading } = useWatchlist();\n  const [assetPickerOpen, setAssetPickerOpen] = useState(false);`);
+  s = s.replace(marker, `${marker}\n\n  // Asset choices come only from the user's live Markets → Watchlist.\n  const { items: watchlistItems, loading: watchlistLoading, refresh: refreshWatchlist } = useWatchlist();\n  const [assetPickerOpen, setAssetPickerOpen] = useState(false);\n  const [assetPickerLoading, setAssetPickerLoading] = useState(false);\n  const openAssetPicker = async () => {\n    setAssetPickerOpen(true);\n    setAssetPickerLoading(true);\n    try {\n      await refreshWatchlist();\n    } finally {\n      setAssetPickerLoading(false);\n    }\n  };`);
+} else if (!s.includes('refresh: refreshWatchlist')) {
+  s = s.replace(
+    'const { items: watchlistItems, loading: watchlistLoading } = useWatchlist();\n  const [assetPickerOpen, setAssetPickerOpen] = useState(false);',
+    'const { items: watchlistItems, loading: watchlistLoading, refresh: refreshWatchlist } = useWatchlist();\n  const [assetPickerOpen, setAssetPickerOpen] = useState(false);\n  const [assetPickerLoading, setAssetPickerLoading] = useState(false);\n  const openAssetPicker = async () => {\n    setAssetPickerOpen(true);\n    setAssetPickerLoading(true);\n    try {\n      await refreshWatchlist();\n    } finally {\n      setAssetPickerLoading(false);\n    }\n  };'
+  );
 }
 
 const start = s.indexOf('                    {/* Symbol + Side + Broker */}');
@@ -27,7 +32,7 @@ const replacement = `                    {/* Asset + Direction — TradingView-s
                           <FormControl>
                             <button
                               type="button"
-                              onClick={() => setAssetPickerOpen(true)}
+                              onClick={openAssetPicker}
                               className="w-full h-12 rounded-xl bg-[#0b0d10] border border-white/[0.10] px-3.5 flex items-center justify-between text-left transition-colors active:bg-white/[0.06] focus:outline-none focus:border-white/25"
                             >
                               <span className="text-[14px] font-semibold text-white truncate">{field.value || (watchlistLoading ? "Loading watchlist…" : "Select from Watchlist")}</span>
@@ -51,8 +56,8 @@ const replacement = `                    {/* Asset + Direction — TradingView-s
                                   <button type="button" onClick={() => setAssetPickerOpen(false)} className="h-8 w-8 rounded-full bg-white/[0.06] text-white/60 flex items-center justify-center">×</button>
                                 </div>
                                 <div className="overflow-y-auto max-h-[calc(72vh-64px)] p-2">
-                                  {watchlistLoading ? (
-                                    <div className="px-3 py-8 text-center text-[12px] text-white/45">Loading watchlist…</div>
+                                  {(assetPickerLoading || watchlistLoading) ? (
+                                    <div className="px-3 py-8 text-center text-[12px] text-white/45">Refreshing Markets watchlist…</div>
                                   ) : watchlistItems.length === 0 ? (
                                     <div className="px-3 py-8 text-center text-[12px] text-white/45">No symbols in your watchlist</div>
                                   ) : (
@@ -103,4 +108,4 @@ s = s.replace(
 );
 
 fs.writeFileSync(path, s);
-console.log("Add Trade watchlist asset picker fixed with a reliable portal-based mobile picker");
+console.log("Add Trade asset picker now refreshes the same Markets watchlist before showing symbols");
