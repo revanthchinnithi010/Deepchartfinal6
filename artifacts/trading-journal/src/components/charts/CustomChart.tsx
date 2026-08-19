@@ -133,15 +133,23 @@ function isValidBarTime(barTime: number, lastBarTime: number, context: string): 
 }
 
 // ── Series helpers ─────────────────────────────────────────────────────────────
-function makeSeries(chart: IChartApi, ct: ChartType): ISeriesApi<SeriesType> {
+function makeSeries(chart: IChartApi, ct: ChartType, settings?: ChartSettings): ISeriesApi<SeriesType> {
   // lastValueVisible: false — we render our own combined live-price+countdown box
   switch (ct) {
     case "bars":
       return chart.addSeries(BarSeries, { upColor: UP_COLOR, downColor: DOWN_COLOR, openVisible: true, lastValueVisible: false });
-    case "line":
-      return chart.addSeries(LineSeries, { color: UP_COLOR, lineWidth: 2, crosshairMarkerVisible: true, crosshairMarkerRadius: 4, lastValueVisible: false });
-    case "line_with_markers":
-      return chart.addSeries(LineSeries, { color: UP_COLOR, lineWidth: 2, crosshairMarkerVisible: true, crosshairMarkerRadius: 4, pointMarkersVisible: true, pointMarkersRadius: 3, lastValueVisible: false });
+    case "line": {
+      const color = settings?.lineColor ?? UP_COLOR;
+      const opacity = settings?.lineOpacity ?? 1;
+      const width = settings?.lineWidth ?? 2;
+      return chart.addSeries(LineSeries, { color: hexToRgba(color, opacity), lineWidth: width, crosshairMarkerVisible: true, crosshairMarkerRadius: 4, lastValueVisible: false });
+    }
+    case "line_with_markers": {
+      const color = settings?.lineColor ?? UP_COLOR;
+      const opacity = settings?.lineOpacity ?? 1;
+      const width = settings?.lineWidth ?? 2;
+      return chart.addSeries(LineSeries, { color: hexToRgba(color, opacity), lineWidth: width, crosshairMarkerVisible: true, crosshairMarkerRadius: 4, pointMarkersVisible: true, pointMarkersRadius: 3, lastValueVisible: false });
+    }
     case "area":
       return chart.addSeries(AreaSeries, { lineColor: UP_COLOR, topColor: "rgba(183,255,90,0.22)", bottomColor: "rgba(183,255,90,0.01)", lineWidth: 2, lastValueVisible: false });
     default:
@@ -1315,7 +1323,15 @@ const CustomChart = memo(function CustomChart({
       },
     });
 
-    if (main && ctRef.current === "candles") {
+    if (main && (ctRef.current === "line" || ctRef.current === "line_with_markers")) {
+      try {
+        (main as ISeriesApi<"Line">).applyOptions({
+          color: hexToRgba(settings.lineColor, settings.lineOpacity),
+          lineWidth: settings.lineWidth,
+          pointMarkersVisible: ctRef.current === "line_with_markers",
+        });
+      } catch { /* chart type may not be line */ }
+    } else if (main && ctRef.current === "candles") {
       try {
         (main as ISeriesApi<"Candlestick">).applyOptions({
           upColor:         settings.upColor,
@@ -1431,7 +1447,7 @@ const CustomChart = memo(function CustomChart({
       },
     });
 
-    const main = makeSeries(chart, ctRef.current);
+    const main = makeSeries(chart, ctRef.current, settings);
 
     chart.subscribeCrosshairMove(param => {
       if (!param.point || !param.time) {
@@ -3007,7 +3023,7 @@ const CustomChart = memo(function CustomChart({
     priceLineRef.current = null;
     chart.removeSeries(old);
 
-    const newS = makeSeries(chart, chartType);
+    const newS = makeSeries(chart, chartType, settings);
     mainRef.current = newS;
 
     // Load data onto the new series BEFORE updating context.
@@ -3117,7 +3133,7 @@ const CustomChart = memo(function CustomChart({
     priceLineRef.current = null;
     try { chart.removeSeries(oldSeries); } catch { /* HMR double-unmount */ }
 
-    const cs = makeSeries(chart, ctRef.current);
+    const cs = makeSeries(chart, ctRef.current, settings);
     mainRef.current = cs;
 
     try {

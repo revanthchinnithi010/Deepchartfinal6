@@ -1743,6 +1743,7 @@ type CSSHandlers = {
   upColor: (v: string) => void; downColor: (v: string) => void;
   upBorderColor: (v: string) => void; downBorderColor: (v: string) => void;
   upWickColor: (v: string) => void; downWickColor: (v: string) => void;
+  lineColor: (v: string) => void; lineOpacity: (v: number) => void; lineWidth: (v: number) => void;
   priceLabelBull: (v: string) => void; priceLabelBear: (v: string) => void;
   priceLabelText: (v: string) => void; priceLabelLine: (v: string) => void;
   timezone: (v: string) => void; precision: (v: string) => void;
@@ -1759,6 +1760,18 @@ type CSSHandlers = {
 };
 
 type CSSSectionProps = { settings: ChartSettings; h: CSSHandlers };
+
+const LineSection = memo(function LineSection({ settings, h }: CSSSectionProps) {
+  return (
+    <Section title="Line">
+      <Row label="Color"><ColorSwatch value={settings.lineColor} onChange={h.lineColor} label="Line Color" /></Row>
+      <Row label="Opacity"><StyledSelect value={String(Math.round(settings.lineOpacity * 100))} onChange={v => h.lineOpacity(Number(v) / 100)} options={[
+        { value: "25", label: "25%" }, { value: "50", label: "50%" }, { value: "75", label: "75%" }, { value: "100", label: "100%" },
+      ]} /></Row>
+      <Row label="Line Width" last><ThicknessButtons value={settings.lineWidth} onChange={h.lineWidth} /></Row>
+    </Section>
+  );
+});
 
 const CandleSection = memo(function CandleSection({ settings, h }: CSSSectionProps) {
   return (
@@ -1825,6 +1838,10 @@ const TimezoneSection = memo(function TimezoneSection({ settings, h }: CSSSectio
       </Row>
     </Section>
   );
+});
+
+const LineTabContent = memo(function LineTabContent({ settings, h }: CSSSectionProps) {
+  return <div style={{ padding:"12px 14px 4px" }}><LineSection settings={settings} h={h} /></div>;
 });
 
 const CandlesTabContent = memo(function CandlesTabContent({ settings, h }: CSSSectionProps) {
@@ -1931,9 +1948,10 @@ const CS_EASE_OPEN  = "cubic-bezier(0.22,1,0.36,1)";
 const CS_EASE_CLOSE = "cubic-bezier(0.4,0,0.6,1)";
 
 const ChartSettingsSheet = memo(function ChartSettingsSheet({
-  settings, onChange, onSaveAsDefault, onBack, onClose,
+  settings, onChange, onSaveAsDefault, chartType, onBack, onClose,
 }: {
   settings: ChartSettings;
+  chartType: ChartType;
   onChange: (s: ChartSettings) => void;
   onSaveAsDefault?: (s: ChartSettings) => void;
   /** Back (←): preserve changes, re-open MoreOptionsSheet. */
@@ -1941,7 +1959,7 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
   /** Close (✕): revert to snapshot, dismiss completely. */
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"Candles"|"Appearance"|"Scale">("Candles");
+  const [tab, setTab] = useState<"Candles"|"Line"|"Appearance"|"Scale">(() => (chartType === "line" || chartType === "line_with_markers") ? "Line" : "Candles");
 
   // ── Open / close animation ─────────────────────────────────────────────────
   const [visible,  setVisible]  = useState(false);
@@ -1987,6 +2005,9 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
     downBorderColor:    (v: string)  => p({ downBorderColor: v }),
     upWickColor:        (v: string)  => p({ upWickColor: v }),
     downWickColor:      (v: string)  => p({ downWickColor: v }),
+    lineColor:           (v: string)  => p({ lineColor: v }),
+    lineOpacity:         (v: number)  => p({ lineOpacity: v }),
+    lineWidth:           (v: number)  => p({ lineWidth: v }),
     priceLabelBull:     (v: string)  => p({ priceLabelBullColor: v }),
     priceLabelBear:     (v: string)  => p({ priceLabelBearColor: v }),
     priceLabelText:     (v: string)  => p({ priceLabelTextColor: v }),
@@ -2105,7 +2126,7 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
         flexShrink: 0,
         background: "#000000",
       }}>
-        {(["Candles","Appearance","Scale"] as const).map(t => {
+        {(["Candles","Line","Appearance","Scale"] as const).map(t => {
           const active = tab === t;
           return (
             <button
@@ -2149,6 +2170,7 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
         WebkitOverflowScrolling: "touch" as never,
       }}>
         {tab === "Candles"    && <CandlesTabContent    settings={settings} h={h} />}
+        {tab === "Line"       && <LineTabContent       settings={settings} h={h} />}
         {tab === "Appearance" && <AppearanceTabContent settings={settings} h={h} />}
         {tab === "Scale"      && <ScaleTabContent      settings={settings} h={h} />}
       </div>
@@ -6118,7 +6140,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       />
 
       {showIndicators  && <IndicatorsPanel anchorEl={null} onClose={() => setShowIndicators(false)} />}
-      {showSettings    && <ChartSettingsSheet settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefaultWrapped} onBack={handleBackFromSettings} onClose={handleCloseFromSettings} />}
+      {showSettings    && <ChartSettingsSheet settings={chartSettings} chartType={chartType} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefaultWrapped} onBack={handleBackFromSettings} onClose={handleCloseFromSettings} />}
       {showAlertCenter && <AlertSheet onClose={() => setShowAlertCenter(false)} />}
 
 
