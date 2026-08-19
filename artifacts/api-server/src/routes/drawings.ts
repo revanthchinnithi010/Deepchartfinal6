@@ -38,7 +38,9 @@ const PatchBody = z.object({
 
 const IdParam = z.object({ id: z.coerce.number().int().positive() });
 
-// Tool types that get a persistent TL-NNN display ID
+// Line drawings use the drawing primary key as their public display ID.
+// This deliberately matches the UI fallback (TL-{drawing.id}) so the chart,
+// alert creator and alert list can never drift apart because of a second sequence.
 const LINE_TOOL_TYPES = new Set(["trendline", "ray", "extended"]);
 
 function serializeRow(row: Record<string, unknown>) {
@@ -97,19 +99,36 @@ drawingsRouter.post("/drawings", async (req, res): Promise<void> => {
   try {
     const client = await pool.connect();
     try {
-      // Generate a persistent display ID (TL-001, TL-002 …) for line-type drawings
-      let displayId: string | null = null;
-      if (LINE_TOOL_TYPES.has(d.toolType)) {
-        const seqRes = await client.query<{ display_id: string }>(
-          `SELECT 'TL-' || LPAD(nextval('drawing_display_id_seq')::TEXT, 3, '0') AS display_id`,
-        );
-        displayId = seqRes.rows[0]?.display_id ?? null;
-      }
-
+      // Use the drawings primary-key sequence itself for TL-NNN. There is now
+      // exactly one ID source, so a drawing can never be TL-061 on the chart
+      // while the alert UI independently derives TL-087 from the row ID.
       const result = await client.query(
-        `INSERT INTO drawings (symbol, timeframe, tool_type, points, style, is_locked, is_visible, display_id)
-         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8) RETURNING *`,
-        [d.symbol, d.timeframe, d.toolType, JSON.stringify(d.points), JSON.stringify(style), d.isLocked, d.isVisible, displayId],
+        `WITH new_id AS (
+           SELECT nextval('drawings_id_seq') AS id
+         )
+         INSERT INTO drawings (id, symbol, timeframe, tool_type, points, style, is_locked, is_visible, display_id)
+         SELECT
+           new_id.id,
+           $1,
+           $2,
+           $3,
+           $4::jsonb,
+           $5::jsonb,
+           $6,
+           $7,
+           CASE WHEN $3 = ANY($8::text[]) THEN 'TL-' || LPAD(new_id.id::TEXT, 3, '0') ELSE NULL END
+         FROM new_id
+         RETURNING *`,
+        [
+          d.symbol,
+          d.timeframe,
+          d.toolType,
+          JSON.stringify(d.points),
+          JSON.stringify(style),
+          d.isLocked,
+          d.isVisible,
+          Array.from(LINE_TOOL_TYPES),
+        ],
       );
       res.status(201).json(serializeRow(result.rows[0] as Record<string, unknown>));
     } finally {
