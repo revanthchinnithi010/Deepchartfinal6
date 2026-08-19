@@ -5,6 +5,9 @@ export interface ChartSettings {
   downBorderColor: string;
   upWickColor:     string;
   downWickColor:   string;
+  lineColor:       string;
+  lineOpacity:     number;
+  lineWidth:       number;
   timezone:        "UTC" | "IST" | "Exchange" | "Local";
   bgColor:         string;
   bgType:          "solid" | "gradient";
@@ -42,6 +45,9 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   downBorderColor: "#ef4444",
   upWickColor:     "#22c55e",
   downWickColor:   "#ef4444",
+  lineColor:       "#22c55e",
+  lineOpacity:     1,
+  lineWidth:       2,
   timezone:        "UTC",
   bgColor:         "#000000",
   bgType:          "solid",
@@ -63,7 +69,6 @@ export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   precision:       "2",
   scaleMode:       "normal",
   priceScaleAutoScale: true,
-  // Live price label must use the exact same bullish/bearish colors as candles.
   priceLabelBullColor:  "#22c55e",
   priceLabelBearColor:  "#ef4444",
   priceLabelTextColor:  "#ffffff",
