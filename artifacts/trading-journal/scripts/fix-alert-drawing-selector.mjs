@@ -59,4 +59,36 @@ if (s.includes('drawingDisplayId:')) {
 }
 
 fs.writeFileSync(path, s);
-console.log("Trendline alert selector now resolves the canonical chart displayId from selected/matching drawing");
+
+// Keep the Alerts page on the exact same canonical drawing display ID.
+// The API/database numeric trendline ID is an internal identifier and must
+// never be displayed as a replacement for the chart's TL-NNN display ID.
+const alertsPath = "./src/pages/alerts.tsx";
+let a = fs.readFileSync(alertsPath, "utf8");
+
+const converterMarker = '    point2Time:  t["point2Time"]  as string,\n';
+if (a.includes(converterMarker) && !a.includes('drawingDisplayId: (t["drawingDisplayId"]')) {
+  a = a.replace(
+    converterMarker,
+    `${converterMarker}    drawingDisplayId: (t["drawingDisplayId"] as string | undefined) ?? (t["drawing_display_id"] as string | undefined),\n`
+  );
+}
+
+const postMarker = '          point2Price: a.point2Price, point2Time: a.point2Time,\n';
+if (a.includes(postMarker) && !a.includes('          drawingDisplayId: a.drawingDisplayId,')) {
+  a = a.replace(
+    postMarker,
+    `${postMarker}          drawingDisplayId: a.drawingDisplayId,\n`
+  );
+}
+
+const cardMarker = '          <span className="text-[10px] text-muted-foreground/60">{alert.timeframe}</span>\n';
+if (a.includes(cardMarker) && !a.includes('{alert.drawingDisplayId}')) {
+  a = a.replace(
+    cardMarker,
+    `${cardMarker}          {alert.drawingDisplayId && (\n            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-primary/20 bg-primary/10 text-primary">{alert.drawingDisplayId}</span>\n          )}\n`
+  );
+}
+
+fs.writeFileSync(alertsPath, a);
+console.log("Trendline chart and Alerts page now use the same drawing display ID");
