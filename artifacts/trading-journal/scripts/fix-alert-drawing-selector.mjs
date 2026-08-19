@@ -39,5 +39,34 @@ ${marker}`;
   s = s.replace(marker, block);
 }
 
+// Always bind the alert to the selected chart drawing's persistent display ID.
+// This prevents the alert record from generating/keeping an unrelated TL-NNN ID.
+const displayIdExpr = '(selectedDrawingId != null ? liveChartDrawings.find((d) => d.id === selectedDrawingId)?.displayId : prefillDrawing?.displayId) ?? null';
+if (!s.includes('const selectedDrawingDisplayId =')) {
+  s = s.replace(
+    '  const isHLine = drawingType === "horizontal_line";',
+    `  const selectedDrawingDisplayId = ${displayIdExpr};\n\n  const isHLine = drawingType === "horizontal_line";`
+  );
+}
+
+if (s.includes('drawingDisplayId:')) {
+  s = s.replace(/drawingDisplayId:\s*[^,\n}]+/g, `drawingDisplayId: selectedDrawingDisplayId`);
+} else {
+  // If an older build does not yet include the field, add it to the trendline alert payload.
+  const payloadMarkers = [
+    'point2Time:',
+    'point2Time :',
+  ];
+  let inserted = false;
+  for (const marker of payloadMarkers) {
+    if (s.includes(marker)) {
+      s = s.replace(marker, `drawingDisplayId: selectedDrawingDisplayId,\n        ${marker}`);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) console.warn("Could not find alert payload marker; drawingDisplayId was not injected");
+}
+
 fs.writeFileSync(path, s);
-console.log("Live chart drawing selector applied");
+console.log("Live chart drawing selector + persistent display ID binding applied");
