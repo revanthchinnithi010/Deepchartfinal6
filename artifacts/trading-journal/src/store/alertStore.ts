@@ -9,6 +9,7 @@ import type {
 import { useDrawingStore } from "@/store/drawingStore";
 
 const LS_KEY = "tj_global_alerts_v1";
+const TRIGGERED_DRAWING_IDS_KEY = "tj_triggered_drawing_ids_v1";
 const TRIGGERED_DRAWING_COLOR = "#ef4444";
 let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -34,6 +35,26 @@ function saveLocal(alerts: AnyAlert[]) {
     localStorage.setItem(LS_KEY, JSON.stringify(alerts));
   } catch {
     // Ignore storage quota/private-mode errors.
+  }
+}
+
+function loadTriggeredDrawingIds(): Set<number> {
+  try {
+    const raw = localStorage.getItem(TRIGGERED_DRAWING_IDS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.map(Number).filter(Number.isFinite));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveTriggeredDrawingIds(ids: Set<number>) {
+  try {
+    localStorage.setItem(TRIGGERED_DRAWING_IDS_KEY, JSON.stringify([...ids]));
+  } catch {
+    // Ignore storage errors.
   }
 }
 
@@ -200,28 +221,36 @@ function drawingMatchesTriggeredAlert(drawing: any, alert: AnyAlert): boolean {
   return false;
 }
 
-/**
- * A triggered drawing must stay red for the lifetime of the drawing.
- * We intentionally persist the style change in drawingStore instead of deriving
- * it from the current alert status at render time: when the alert is deleted,
- * the drawing remains red, and when the drawing itself is deleted it naturally
- * disappears. This also makes the behavior survive reloads.
- */
 function markTriggeredDrawingsRed(alerts: AnyAlert[]) {
   const triggered = alerts.filter(a =>
     (a.type === "trendline" || a.type === "zone") && a.status === "triggered"
   );
-  if (triggered.length === 0) return;
+  const persistedIds = loadTriggeredDrawingIds();
+  const drawings = useDrawingStore.getState().drawings;
 
-  const store = useDrawingStore.getState();
-  for (const drawing of store.drawings) {
-    if (drawing.style.color === TRIGGERED_DRAWING_COLOR) continue;
-    if (triggered.some(alert => drawingMatchesTriggeredAlert(drawing, alert))) {
-      store.updateDrawing(drawing.id, {
+  // Previously triggered drawings remain red even if their alert is later deleted.
+  for (const drawing of drawings) {
+    if (persistedIds.has(drawing.id) && drawing.style.color !== TRIGGERED_DRAWING_COLOR) {
+      useDrawingStore.getState().updateDrawing(drawing.id, {
         style: { ...drawing.style, color: TRIGGERED_DRAWING_COLOR },
       });
     }
   }
+
+  if (triggered.length === 0) return;
+
+  const store = useDrawingStore.getState();
+  for (const drawing of store.drawings) {
+    if (triggered.some(alert => drawingMatchesTriggeredAlert(drawing, alert))) {
+      persistedIds.add(drawing.id);
+      if (drawing.style.color !== TRIGGERED_DRAWING_COLOR) {
+        store.updateDrawing(drawing.id, {
+          style: { ...drawing.style, color: TRIGGERED_DRAWING_COLOR },
+        });
+      }
+    }
+  }
+  saveTriggeredDrawingIds(persistedIds);
 }
 
 interface AlertStore {
@@ -235,15 +264,11 @@ interface AlertStore {
 }
 
 export const useAlertStore = create<AlertStore>((set, get) => ({
-  // Only persisted DB IDs are allowed into the production store. This prevents
-  // a failed POST from making a client-only alert look successfully created.
   alerts: typeof window !== "undefined" ? loadLocal() : [],
   isHydrating: false,
 
   addAlert: (alert) => set((state) => {
-    if (!isPersistedAlertId(alert.id)) {
-      return state;
-    }
+    if (!isPersistedAlertId(alert.id)) return state;
     const next = [alert, ...state.alerts.filter(a => a.id !== alert.id)];
     saveLocal(next);
     markTriggeredDrawingsRed(next);
@@ -303,7 +328,6 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
       markTriggeredDrawingsRed(alerts);
       set({ alerts });
     } catch {
-      // Keep the last local snapshot if the API is temporarily unavailable.
       markTriggeredDrawingsRed(get().alerts);
     } finally {
       set({ isHydrating: false });
