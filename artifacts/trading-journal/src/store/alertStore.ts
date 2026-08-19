@@ -6,8 +6,10 @@ import type {
   TrendlineAlert,
   AlertStatus,
 } from "@/data/alertsData";
+import { useDrawingStore } from "@/store/drawingStore";
 
 const LS_KEY = "tj_global_alerts_v1";
+const TRIGGERED_DRAWING_COLOR = "#ef4444";
 let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
 
 function isPersistedAlertId(id: string): boolean {
@@ -63,9 +65,9 @@ function apiAlertToPriceAlert(a: Record<string, unknown>): PriceAlert {
 }
 
 function apiZoneToZoneAlert(z: Record<string, unknown>): ZoneAlert {
-  return {
+  const alert = {
     id: `z_${z.id}`,
-    type: "zone",
+    type: "zone" as const,
     symbol: String(z.symbol ?? ""),
     zoneType: (z.zoneType as ZoneAlert["zoneType"]) ?? "support_resistance",
     upperPrice: Number(z.upperPrice ?? 0),
@@ -73,11 +75,15 @@ function apiZoneToZoneAlert(z: Record<string, unknown>): ZoneAlert {
     timeframe: String(z.timeframe ?? "1H"),
     condition: (z.condition as ZoneAlert["condition"]) ?? "touch",
     notes: String(z.notes ?? ""),
-    status: z.isTriggered ? "triggered" : z.isActive ? "active" : "paused",
+    status: z.isTriggered ? "triggered" as const : z.isActive ? "active" as const : "paused" as const,
     createdAt: String(z.createdAt ?? new Date().toISOString()),
     triggeredAt: (z.triggeredAt as string | null) ?? null,
     repeatMode: (z.repeatMode as ZoneAlert["repeatMode"]) ?? "three_reminders",
   };
+  if (typeof z.drawingDisplayId === "string") {
+    return { ...alert, drawingDisplayId: z.drawingDisplayId } as ZoneAlert;
+  }
+  return alert;
 }
 
 function apiTrendlineToTrendlineAlert(t: Record<string, unknown>): TrendlineAlert {
@@ -140,6 +146,84 @@ function numericId(id: string): string {
   return id;
 }
 
+function sameSymbol(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return true;
+  return a.trim().toUpperCase() === b.trim().toUpperCase();
+}
+
+function closePrice(a: unknown, b: unknown): boolean {
+  const x = Number(a), y = Number(b);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const tolerance = Math.max(1e-10, Math.max(Math.abs(x), Math.abs(y)) * 1e-6);
+  return Math.abs(x - y) <= tolerance;
+}
+
+function timeToSec(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value > 1e12 ? value / 1000 : value;
+  const n = Number(value);
+  if (Number.isFinite(n) && n > 0) return n > 1e12 ? n / 1000 : n;
+  const parsed = Date.parse(String(value ?? ""));
+  return Number.isFinite(parsed) ? parsed / 1000 : null;
+}
+
+function closeTime(a: unknown, b: unknown): boolean {
+  const x = timeToSec(a), y = timeToSec(b);
+  if (x === null || y === null) return false;
+  return Math.abs(x - y) <= 120;
+}
+
+function drawingMatchesTriggeredAlert(drawing: any, alert: AnyAlert): boolean {
+  if (!drawing || !drawing.isVisible) return false;
+  const displayId = String(drawing.displayId ?? "");
+  const alertDisplayId = String((alert as any).drawingDisplayId ?? "");
+  if (displayId && alertDisplayId && displayId === alertDisplayId) return true;
+  if (!sameSymbol(drawing.symbol, alert.symbol) || !Array.isArray(drawing.points) || drawing.points.length < 2) return false;
+
+  if (alert.type === "trendline") {
+    if (!["trendline", "ray", "extended"].includes(String(drawing.toolType))) return false;
+    const p0 = drawing.points[0], p1 = drawing.points[1];
+    const direct = closePrice(p0?.price, alert.point1Price) && closePrice(p1?.price, alert.point2Price)
+      && closeTime(p0?.time, alert.point1Time) && closeTime(p1?.time, alert.point2Time);
+    const reverse = closePrice(p0?.price, alert.point2Price) && closePrice(p1?.price, alert.point1Price)
+      && closeTime(p0?.time, alert.point2Time) && closeTime(p1?.time, alert.point1Time);
+    return direct || reverse;
+  }
+
+  if (alert.type === "zone") {
+    if (String(drawing.toolType) !== "rect") return false;
+    const p0 = Number(drawing.points[0]?.price), p1 = Number(drawing.points[1]?.price);
+    if (!Number.isFinite(p0) || !Number.isFinite(p1)) return false;
+    const upper = Math.max(p0, p1), lower = Math.min(p0, p1);
+    return closePrice(upper, alert.upperPrice) && closePrice(lower, alert.lowerPrice);
+  }
+
+  return false;
+}
+
+/**
+ * A triggered drawing must stay red for the lifetime of the drawing.
+ * We intentionally persist the style change in drawingStore instead of deriving
+ * it from the current alert status at render time: when the alert is deleted,
+ * the drawing remains red, and when the drawing itself is deleted it naturally
+ * disappears. This also makes the behavior survive reloads.
+ */
+function markTriggeredDrawingsRed(alerts: AnyAlert[]) {
+  const triggered = alerts.filter(a =>
+    (a.type === "trendline" || a.type === "zone") && a.status === "triggered"
+  );
+  if (triggered.length === 0) return;
+
+  const store = useDrawingStore.getState();
+  for (const drawing of store.drawings) {
+    if (drawing.style.color === TRIGGERED_DRAWING_COLOR) continue;
+    if (triggered.some(alert => drawingMatchesTriggeredAlert(drawing, alert))) {
+      store.updateDrawing(drawing.id, {
+        style: { ...drawing.style, color: TRIGGERED_DRAWING_COLOR },
+      });
+    }
+  }
+}
+
 interface AlertStore {
   alerts: AnyAlert[];
   isHydrating: boolean;
@@ -158,12 +242,11 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
 
   addAlert: (alert) => set((state) => {
     if (!isPersistedAlertId(alert.id)) {
-      // The create modals use temporary pa*/za*/ta* IDs. Those IDs are only
-      // valid before a successful POST; never persist them in production UI.
       return state;
     }
     const next = [alert, ...state.alerts.filter(a => a.id !== alert.id)];
     saveLocal(next);
+    markTriggeredDrawingsRed(next);
     return { alerts: next };
   }),
 
@@ -173,12 +256,10 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
         a.id === id ? ({ ...a, ...patch } as AnyAlert) : a
       );
       saveLocal(next);
+      markTriggeredDrawingsRed(next);
       return { alerts: next };
     });
 
-    // The Alerts page performs the authoritative PATCH. Re-read the DB shortly
-    // afterwards so a failed PATCH cannot leave a false paused/active state in
-    // the UI. The DB is always the source of truth.
     if (reconcileTimer) clearTimeout(reconcileTimer);
     reconcileTimer = setTimeout(() => {
       void useAlertStore.getState().hydrateFromApi();
@@ -210,6 +291,7 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
   setAlerts: (alerts) => {
     const persisted = alerts.filter(a => isPersistedAlertId(a.id));
     saveLocal(persisted);
+    markTriggeredDrawingsRed(persisted);
     set({ alerts: persisted });
   },
 
@@ -218,9 +300,11 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
     try {
       const alerts = await fetchDbAlerts();
       saveLocal(alerts);
+      markTriggeredDrawingsRed(alerts);
       set({ alerts });
     } catch {
       // Keep the last local snapshot if the API is temporarily unavailable.
+      markTriggeredDrawingsRed(get().alerts);
     } finally {
       set({ isHydrating: false });
     }
@@ -229,6 +313,7 @@ export const useAlertStore = create<AlertStore>((set, get) => ({
 
 if (typeof window !== "undefined") {
   queueMicrotask(() => {
+    markTriggeredDrawingsRed(loadLocal());
     void useAlertStore.getState().hydrateFromApi();
   });
 }
