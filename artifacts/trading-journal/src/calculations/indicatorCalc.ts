@@ -57,6 +57,78 @@ export function calcRSI(closes: number[], period: number): (number | null)[] {
   return out;
 }
 
+/**
+ * Average Directional Index (ADX), matching the Wilder/TradingView method.
+ *
+ * diLength controls the Wilder smoothing used for TR and directional movement.
+ * adxSmoothing controls the Wilder smoothing of DX into ADX.
+ * The returned array contains ADX only; +DI and -DI are intentionally not
+ * plotted because the app's ADX indicator is the single-line TradingView
+ * "Average Directional Index" display requested by the user.
+ */
+export function calcADX(bars: OHLCBar[], diLength = 14, adxSmoothing = 14): (number | null)[] {
+  const n = bars.length;
+  const di = Math.max(1, Math.floor(diLength) || 14);
+  const smooth = Math.max(1, Math.floor(adxSmoothing) || 14);
+  const out: (number | null)[] = new Array(n).fill(null);
+  if (n <= di) return out;
+
+  const tr = new Array<number>(n).fill(0);
+  const plusDM = new Array<number>(n).fill(0);
+  const minusDM = new Array<number>(n).fill(0);
+
+  for (let i = 1; i < n; i++) {
+    const b = bars[i];
+    const prev = bars[i - 1];
+    tr[i] = Math.max(
+      b.high - b.low,
+      Math.abs(b.high - prev.close),
+      Math.abs(b.low - prev.close),
+    );
+    const upMove = b.high - prev.high;
+    const downMove = prev.low - b.low;
+    plusDM[i] = upMove > downMove && upMove > 0 ? upMove : 0;
+    minusDM[i] = downMove > upMove && downMove > 0 ? downMove : 0;
+  }
+
+  // Wilder RMA seed: simple average of the first `di` values, then the
+  // recursive Wilder smoothing used by TradingView's ta.rma/ta.dmi.
+  let smTR = tr.slice(1, di + 1).reduce((s, v) => s + v, 0) / di;
+  let smPlus = plusDM.slice(1, di + 1).reduce((s, v) => s + v, 0) / di;
+  let smMinus = minusDM.slice(1, di + 1).reduce((s, v) => s + v, 0) / di;
+
+  const dx: (number | null)[] = new Array(n).fill(null);
+  const setDX = (i: number) => {
+    const plusDI = smTR === 0 ? 0 : (100 * smPlus) / smTR;
+    const minusDI = smTR === 0 ? 0 : (100 * smMinus) / smTR;
+    const denom = plusDI + minusDI;
+    dx[i] = denom === 0 ? 0 : (100 * Math.abs(plusDI - minusDI)) / denom;
+  };
+
+  setDX(di);
+  for (let i = di + 1; i < n; i++) {
+    smTR = (smTR * (di - 1) + tr[i]) / di;
+    smPlus = (smPlus * (di - 1) + plusDM[i]) / di;
+    smMinus = (smMinus * (di - 1) + minusDM[i]) / di;
+    setDX(i);
+  }
+
+  const firstDx = di;
+  const seedEnd = firstDx + smooth - 1;
+  if (seedEnd >= n) return out;
+
+  let adx = 0;
+  for (let i = firstDx; i <= seedEnd; i++) adx += dx[i] ?? 0;
+  adx /= smooth;
+  out[seedEnd] = adx;
+
+  for (let i = seedEnd + 1; i < n; i++) {
+    adx = (adx * (smooth - 1) + (dx[i] ?? 0)) / smooth;
+    out[i] = adx;
+  }
+  return out;
+}
+
 export interface SupertrendPoint { value: number; bull: boolean }
 export function calcSupertrend(bars: OHLCBar[], period = 10, mult = 3): (SupertrendPoint | null)[] {
   if (bars.length < period + 1) return bars.map(() => null);
