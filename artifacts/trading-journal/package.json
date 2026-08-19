@@ -6,7 +6,7 @@
   "scripts": {
     "predev": "bash ../../scripts/ensure-install.sh",
     "dev": "pnpm exec vite --config vite.config.ts --host 0.0.0.0",
-    "build": "node ./scripts/fix-remove-splash.mjs && node ./scripts/fix-trendline.mjs && node ./scripts/fix-trendline-selection-tooltip.mjs && node ./scripts/fix-mobile-drawing-button.mjs && node ./scripts/fix-mobile-tools-spacing.mjs && node ./scripts/fix-pinch-zoom.mjs && node ./scripts/fix-native-pinch.mjs && node -e \"const fs=require('fs');const p='src/components/charts/CustomChart.tsx';let s=fs.readFileSync(p,'utf8');s=s.replace(/MIN_FUTURE_BARS\\s*=\\s*50/,'MIN_FUTURE_BARS = 8');fs.writeFileSync(p,s);\" && pnpm exec vite build --config vite.config.ts && node ./scripts/mirror-dist-public.mjs",
+    "build": "node ./scripts/fix-remove-splash.mjs && node ./scripts/fix-trendline.mjs && node ./scripts/fix-mobile-drawing-button.mjs && node ./scripts/fix-mobile-tools-spacing.mjs && node ./scripts/fix-pinch-zoom.mjs && node ./scripts/fix-native-pinch.mjs && node -e \"const fs=require('fs');const p='src/components/charts/CustomChart.tsx';let s=fs.readFileSync(p,'utf8');s=s.replace(/MIN_FUTURE_BARS\\s*=\\s*50/,'MIN_FUTURE_BARS = 8');fs.writeFileSync(p,s);\" && pnpm exec vite build --config vite.config.ts && node ./scripts/mirror-dist-public.mjs",
     "serve": "pnpm exec vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -58,7 +58,7 @@
   },
   "dependencies": {
     "animejs": "4.5.0",
-    "html2canvas": "^1.4.1",
+    "html2canvas": "^4.1.1",
     "lightweight-charts": "^5.0.8",
     "zustand": "^5.0.3"
   }
