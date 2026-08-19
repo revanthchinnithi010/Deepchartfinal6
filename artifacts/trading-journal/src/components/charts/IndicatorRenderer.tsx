@@ -5,11 +5,12 @@ import { useChartBars } from "@/contexts/ChartBarsContext";
 import { useIndicatorStore, type AppliedIndicator } from "@/store/indicatorStore";
 import { useChartStore, type OHLCBar } from "@/store/chartStore";
 import { useLiveMarketContext } from "@/contexts/LiveMarketContext";
-import { calcEMA, calcSMA, calcVWAP, calcRSI, calcSupertrend } from "@/calculations/indicatorCalc";
+import { calcEMA, calcSMA, calcVWAP, calcRSI, calcSupertrend, calcADX } from "@/calculations/indicatorCalc";
 import { subscribePanRange, getPanRange } from "./chartPanState";
 
 interface SeriesEntry {
   series: ISeriesApi<"Line">;
+  paneIndex: number;
 }
 
 function toLineStyle(s: string): LineStyle {
@@ -51,6 +52,12 @@ function buildPoints(bars: OHLCBar[], ind: AppliedIndicator): { time: Time; valu
           return r != null ? [{ time: b.time as Time, value: minP + (r / 100) * range }] : [];
         });
       }
+      case "ADX": {
+        const diLength = Number(ind.settings.diLength) || 14;
+        const adxSmoothing = Number(ind.settings.adxSmoothing) || 14;
+        const vals = calcADX(bars, diLength, adxSmoothing);
+        return bars.flatMap((b, i) => vals[i] != null ? [{ time: b.time as Time, value: vals[i]! }] : []);
+      }
       case "SUPERTREND": {
         const period = Number(ind.settings.period) || 10;
         const mult   = Number(ind.settings.multiplier) || 3;
@@ -90,7 +97,7 @@ export default function IndicatorRenderer() {
   indicatorsRef.current = builtinInds;
 
   // Cache is keyed by indicator id, but its validity also includes settings.
-  // This guarantees EMA/SMA/RSI period changes always recalculate the line.
+  // This guarantees EMA/SMA/RSI/ADX setting changes always recalculate the line.
   const pointCacheRef = useRef<Map<string, {
     barsLen: number;
     firstTime: number;
@@ -156,17 +163,24 @@ export default function IndicatorRenderer() {
 
       const pts = getPoints(bars, ind);
       const existing = map.get(ind.id);
+      const paneIndex = ind.type === "ADX" ? 1 : 0;
 
-      if (existing) {
+      if (existing && existing.paneIndex !== paneIndex) {
+        try { chart.removeSeries(existing.series); } catch { /**/ }
+        map.delete(ind.id);
+      }
+
+      const current = map.get(ind.id);
+      if (current) {
         try {
-          existing.series.applyOptions({
+          current.series.applyOptions({
             visible: ind.visible,
             color: ind.color,
             lineWidth: (ind.lineWidth || 1) as 1 | 2 | 3 | 4,
             lineStyle: toLineStyle(ind.lineStyle),
           });
           if (dataChanged) {
-            existing.series.setData(pts as never[]);
+            current.series.setData(pts as never[]);
           }
         } catch { /**/ }
       } else {
@@ -179,9 +193,9 @@ export default function IndicatorRenderer() {
             priceLineVisible: false,
             crosshairMarkerVisible: false,
             lastValueVisible: false,
-          }, 0);
+          }, paneIndex);
           s.setData(pts as never[]);
-          map.set(ind.id, { series: s });
+          map.set(ind.id, { series: s, paneIndex });
         } catch { /**/ }
       }
     }
@@ -213,6 +227,7 @@ export default function IndicatorRenderer() {
   useEffect(() => {
     return subscribePanRange((range) => {
       for (const entry of seriesMapRef.current.values()) {
+        if (entry.paneIndex !== 0) continue;
         try {
           if (range !== null) {
             entry.series.applyOptions({
