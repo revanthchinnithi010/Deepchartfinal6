@@ -35,6 +35,7 @@ const SMA_PRESETS = [
 ];
 const OTHER_PRESETS: { type: IndicatorType; label: string; color: string; settings: Record<string, unknown> }[] = [
   { type: "RSI", label: "RSI (14)", color: "#c084fc", settings: { period: 14 } },
+  { type: "ADX", label: "ADX (14, 14)", color: "#f23645", settings: { diLength: 14, adxSmoothing: 14 } },
   { type: "VWAP", label: "VWAP", color: "#60a5fa", settings: {} },
   { type: "SUPERTREND", label: "Supertrend", color: "#22c55e", settings: { period: 10, multiplier: 3 } },
 ];
