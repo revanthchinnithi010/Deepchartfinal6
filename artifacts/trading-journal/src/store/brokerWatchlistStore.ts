@@ -21,9 +21,9 @@ export type Market = "Crypto" | "Forex" | "Indices" | "Commodities";
 
 export interface CatalogEntry {
   tv:          string;
-  label:       string;
-  badge:       string;
-  market:      Market;
+  label:        string;
+  badge:        string;
+  market:       Market;
   description: string;
 }
 
@@ -53,11 +53,6 @@ export const SYMBOL_CATALOG: Record<string, CatalogEntry> = {
   UKOIL:   { tv: "TVC:UKOIL",        label: "UK Oil",   badge: "BRENT",market: "Commodities", description: "UK Crude Oil (Brent)" },
   NATGAS:  { tv: "TVC:NATGAS",       label: "Nat Gas",  badge: "GAS",  market: "Commodities", description: "Natural Gas" },
 };
-
-const DEFAULT_SYMBOLS = [
-  "NAS100", "US30", "XAUUSD", "EURUSD", "GBPJPY", "USOIL", "UKOIL",
-  "BTCUSD", "ETHUSD", "SOLUSD", "DOGEUSD", "PEPEUSD",
-];
 
 type RawRow = {
   id: number; symbol: string; provider: string;
@@ -114,8 +109,6 @@ export interface BrokerWatchlistState {
   refresh:        () => Promise<void>;
 }
 
-let _seeding = false;
-
 export const useBrokerWatchlistStore = create<BrokerWatchlistState>((set, get) => ({
   items:   [],
   loading: true,
@@ -124,33 +117,18 @@ export const useBrokerWatchlistStore = create<BrokerWatchlistState>((set, get) =
   refresh: async () => {
     try {
       const res = await fetch("/api/watchlist");
-      if (!res.ok) return;
+      if (!res.ok) {
+        set({ items: [], symbols: [], loading: false });
+        return;
+      }
       const rawRows = await res.json() as unknown;
       const rows = toArray<RawRow>(rawRows, "brokerWatchlistStore.refresh:/api/watchlist");
-
-      if (rows.length === 0 && !_seeding) {
-        _seeding = true;
-        await Promise.all(
-          DEFAULT_SYMBOLS.map(sym =>
-            fetch("/api/watchlist", {
-              method:  "POST",
-              headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify({ symbol: sym, isFavorite: false }),
-            })
-          )
-        );
-        const r2      = await fetch("/api/watchlist");
-        const rawRows2 = await r2.json() as unknown;
-        const rows2   = toArray<RawRow>(rawRows2, "brokerWatchlistStore.refresh:/api/watchlist(seed)");
-        const items   = rows2.map(toEntry);
-        set({ items, loading: false, symbols: items.map(i => i.symbol) });
-        _seeding = false;
-      } else {
-        const items = rows.map(toEntry);
-        set({ items, loading: false, symbols: items.map(i => i.symbol) });
-      }
+      const items = rows.map(toEntry);
+      // The API is the single source of truth. An empty watchlist stays empty.
+      // Never seed DEFAULT_SYMBOLS or fall back to catalog symbols here.
+      set({ items, loading: false, symbols: items.map(i => i.symbol) });
     } catch {
-      set({ loading: false });
+      set({ items: [], symbols: [], loading: false });
     }
   },
 
