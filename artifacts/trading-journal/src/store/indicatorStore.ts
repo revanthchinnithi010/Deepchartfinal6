@@ -2,10 +2,10 @@ import { create } from "zustand";
 import { toArray } from "@/lib/safeArray";
 import { useChartStore } from "@/store/chartStore";
 
-export type IndicatorType = "EMA" | "SMA" | "RSI" | "VWAP" | "SUPERTREND" | "CUSTOM";
+export type IndicatorType = "EMA" | "SMA" | "RSI" | "VWAP" | "SUPERTREND" | "ADX" | "CUSTOM";
 export interface AppliedIndicator { id:string; type:IndicatorType; label:string; visible:boolean; color:string; lineWidth:number; lineStyle:"solid"|"dashed"|"dotted"; opacity:number; settings:Record<string,unknown>; visibleTimeframes:string[]; pineCode?:string; }
-export const DEFAULT_SETTINGS:Record<IndicatorType,Record<string,unknown>>={EMA:{period:9,source:"close",offset:0},SMA:{period:20,source:"close",offset:0},RSI:{period:14,source:"close"},VWAP:{},SUPERTREND:{period:10,multiplier:3},CUSTOM:{}};
-export const DEFAULT_COLORS:Record<IndicatorType,string>={EMA:"#f59e0b",SMA:"#60a5fa",RSI:"#c084fc",VWAP:"#60a5fa",SUPERTREND:"#22c55e",CUSTOM:"#22c55e"};
+export const DEFAULT_SETTINGS:Record<IndicatorType,Record<string,unknown>>={EMA:{period:9,source:"close",offset:0},SMA:{period:20,source:"close",offset:0},RSI:{period:14,source:"close"},VWAP:{},SUPERTREND:{period:10,multiplier:3},ADX:{diLength:14,adxSmoothing:14},CUSTOM:{}};
+export const DEFAULT_COLORS:Record<IndicatorType,string>={EMA:"#f59e0b",SMA:"#60a5fa",RSI:"#c084fc",VWAP:"#60a5fa",SUPERTREND:"#22c55e",ADX:"#f23645",CUSTOM:"#22c55e"};
 const LS_KEY="tj_applied_indicators_v2";
 function genId(){return Math.random().toString(36).slice(2,10)}
 function saveApplied(v:AppliedIndicator[]){try{localStorage.setItem(LS_KEY,JSON.stringify(v))}catch{}}
@@ -14,7 +14,7 @@ function sourceExpr(s:unknown){switch(String(s??"close").toLowerCase()){case"ope
 function builtinPine(type:IndicatorType,settings:Record<string,unknown>){const p=Math.max(1,Math.floor(Number(settings.period)||(type==="SMA"?20:type==="RSI"?14:9)));const src=sourceExpr(settings.source);if(type==="EMA")return`//@version=5\nindicator("EMA",overlay=true)\nplot(ta.ema(${src},${p}))`;if(type==="SMA")return`//@version=5\nindicator("SMA",overlay=true)\nplot(ta.sma(${src},${p}))`;if(type==="RSI")return`//@version=5\nindicator("RSI",overlay=false)\nplot(ta.rsi(${src},${p}))`;if(type==="VWAP")return`//@version=5\nindicator("VWAP",overlay=true)\nplot(ta.vwap(${src}))`;return undefined}
 function normalize(i:AppliedIndicator):AppliedIndicator{const settings=i.settings??{};const pineCode=i.pineCode||builtinPine(i.type,settings);return pineCode?{...i,settings,pineCode}:{...i,settings}}
 function migrateOld():AppliedIndicator[]{try{const old=JSON.parse(localStorage.getItem("tv_indicators")??"null") as Record<string,boolean>|null;if(!old)return[];return ([['ema9',9,'#f59e0b'],['ema21',21,'#38bdf8'],['ema50',50,'#a78bfa'],['ema200',200,'#f87171']] as const).filter(([k])=>old[k]).map(([id,p,c])=>normalize({id,type:"EMA",label:`EMA (${p})`,visible:true,color:c,lineWidth:1,lineStyle:"solid",opacity:1,settings:{period:p,source:"close",offset:0},visibleTimeframes:[]}));}catch{return[]}}
-function loadApplied():AppliedIndicator[]{try{const s=localStorage.getItem(LS_KEY);const parsed=s?toArray<AppliedIndicator>(JSON.parse(s),"indicatorStore.loadApplied:localStorage"):migrateOld();const normalized=parsed.filter(i=>["EMA","SMA","RSI","VWAP","SUPERTREND","CUSTOM"].includes(i?.type)).map(normalize);if(normalized.some(i=>i.type==="EMA"))disableLegacyEMA();return normalized}catch{return[]}}
+function loadApplied():AppliedIndicator[]{try{const s=localStorage.getItem(LS_KEY);const parsed=s?toArray<AppliedIndicator>(JSON.parse(s),"indicatorStore.loadApplied:localStorage"):migrateOld();const normalized=parsed.filter(i=>["EMA","SMA","RSI","VWAP","SUPERTREND","ADX","CUSTOM"].includes(i?.type)).map(normalize);if(normalized.some(i=>i.type==="EMA"))disableLegacyEMA();return normalized}catch{return[]}}
 interface IndicatorStoreState{appliedIndicators:AppliedIndicator[];addIndicator:(type:IndicatorType,label:string,overrides?:Partial<AppliedIndicator>)=>void;removeIndicator:(id:string)=>void;toggleVisible:(id:string)=>void;updateIndicator:(id:string,changes:Partial<AppliedIndicator>)=>void;duplicateIndicator:(id:string)=>void}
 export const useIndicatorStore=create<IndicatorStoreState>((set,get)=>({
  appliedIndicators:loadApplied(),
@@ -22,5 +22,5 @@ export const useIndicatorStore=create<IndicatorStoreState>((set,get)=>({
  removeIndicator:id=>{const next=get().appliedIndicators.filter(i=>i.id!==id);saveApplied(next);set({appliedIndicators:next})},
  toggleVisible:id=>{const next=get().appliedIndicators.map(i=>i.id===id?{...i,visible:!i.visible}:i);saveApplied(next);set({appliedIndicators:next})},
  updateIndicator:(id,changes)=>{const next=get().appliedIndicators.map(i=>{if(i.id!==id)return i;const settings={...i.settings,...(changes.settings??{})};return normalize({...i,...changes,settings} as AppliedIndicator)});saveApplied(next);if(next.some(i=>i.type==="EMA"))disableLegacyEMA();set({appliedIndicators:next})},
- duplicateIndicator:id=>{const orig=get().appliedIndicators.find(i=>i.id===id);if(!orig)return;const next=[...get().appliedIndicators,{...normalize(orig),id:genId(),label:`${orig.label} (copy)`}];saveApplied(next);if(orig.type==="EMA")disableLegacyEMA();set({appliedIndicators:next})},
+ duplicateIndicator:id=>{const orig=get().appliedIndicators.find(i=>i.id===id);if(!orig)return;const next=[...get().appliedIndicators,{...normalize(orig),id:genId(),label:`${orig.label} (copy)` }];saveApplied(next);if(orig.type==="EMA")disableLegacyEMA();set({appliedIndicators:next})},
 }));
