@@ -4,8 +4,7 @@ const path = "./src/components/charts/DrawingAlertModal.tsx";
 let s = fs.readFileSync(path, "utf8");
 
 // The chart drawing store is the single source of truth. The alert screen must
-// use the chart's currently selected drawing ID before trusting any stale
-// prefill/alert context.
+// use the chart's currently selected drawing ID before trusting stale alert IDs.
 if (!s.includes('useDrawingStore } from "@/store/drawingStore"')) {
   s = s.replace(
     'import { useAlertStore } from "@/store/alertStore";',
@@ -16,12 +15,10 @@ if (!s.includes('useDrawingStore } from "@/store/drawingStore"')) {
 if (!s.includes('const liveChartDrawings = useDrawingStore')) {
   const marker = '  const isHLine = drawingType === "horizontal_line";';
   if (!s.includes(marker)) throw new Error("Drawing type marker not found");
-  const injected = `  const liveChartDrawings = useDrawingStore((state) => state.drawings);\n  const chartSelectedDrawingId = useDrawingStore((state) => state.selectedDrawingId);\n  const [selectedDrawingId, setSelectedDrawingId] = useState<number | null>(() => chartSelectedDrawingId ?? prefillDrawing?.id ?? null);\n  useEffect(() => {\n    if (chartSelectedDrawingId != null) setSelectedDrawingId(chartSelectedDrawingId);\n  }, [chartSelectedDrawingId]);\n  const normalizeTf = (tf: string) => { const raw = String(tf ?? "").trim().toUpperCase(); if (raw === "D") return "1D"; if (raw === "W") return "1W"; if (raw === "M") return "1M"; if (raw.endsWith("H")) return String(Number(raw.slice(0, -1)) * 60) + "M"; if (/^\\d+$/.test(raw)) return String(Number(raw)) + "M"; return raw; };\n  const selectableTrendlines = liveChartDrawings.filter((d) => ["trendline", "extended", "ray"].includes(d.toolType) && (!d.symbol || !symbol || d.symbol === symbol) && normalizeTf(d.timeframe) === normalizeTf(currentInterval) && d.points.length >= 2 && d.isVisible !== false);\n  const selectedChartDrawing = selectedDrawingId != null ? liveChartDrawings.find((d) => d.id === selectedDrawingId) : undefined;\n\n  const isHLine = drawingType === "horizontal_line";`;
+  const injected = `  const liveChartDrawings = useDrawingStore((state) => state.drawings);\n  const chartSelectedDrawingId = useDrawingStore((state) => state.selectedDrawingId);\n  const [selectedDrawingId, setSelectedDrawingId] = useState<number | null>(() => chartSelectedDrawingId ?? prefillDrawing?.id ?? null);\n  useEffect(() => {\n    if (chartSelectedDrawingId != null) setSelectedDrawingId(chartSelectedDrawingId);\n  }, [chartSelectedDrawingId]);\n  const normalizeTf = (tf: string) => { const raw = String(tf ?? "").trim().toUpperCase(); if (raw === "D") return "1D"; if (raw === "W") return "1W"; if (raw === "M") return "1M"; if (raw.endsWith("H")) return String(Number(raw.slice(0, -1)) * 60) + "M"; if (/^\\d+$/.test(raw)) return String(Number(raw)) + "M"; return raw; };\n  const selectableTrendlines = liveChartDrawings.filter((d) => ["trendline", "extended", "ray"].includes(d.toolType) && (!d.symbol || !symbol || d.symbol === symbol) && normalizeTf(d.timeframe) === normalizeTf(currentInterval) && d.points.length >= 2 && d.isVisible !== false);\n  const selectedChartDrawing = selectedDrawingId != null ? liveChartDrawings.find((d) => d.id === selectedDrawingId) : undefined;\n  const selectedChartDisplayId = selectedChartDrawing?.displayId ?? (selectedChartDrawing as any)?.display_id ?? null;\n\n  const isHLine = drawingType === "horizontal_line";`;
   s = s.replace(marker, injected);
 }
 
-// Keep the live chart drawing selector in the alert form. Its selected row is
-// driven by the chart store ID, not by the alert/database record ID.
 if (!s.includes('data-live-drawing-selector')) {
   const marker = '            {/* Drawing type */}';
   if (!s.includes(marker)) throw new Error("Drawing type marker not found");
@@ -35,7 +32,8 @@ if (!s.includes('data-live-drawing-selector')) {
                   {selectableTrendlines.map((d) => {
                     const selected = selectedDrawingId === d.id;
                     const p1 = d.points[0]; const p2 = d.points[1];
-                    return <button key={d.id} type="button" onClick={() => { setSelectedDrawingId(d.id); setDrawingType(d.toolType === "ray" ? "ray" : "trendline"); const mappedTf = ({ "1":"1m", "5":"5m", "15":"15m", "30":"30m", "60":"1H", "120":"2H", "240":"4H", "D":"1D", "W":"1W" } as Record<string,string>)[String(d.timeframe)] ?? String(d.timeframe); setTimeframe(mappedTf); setP1Price(String(p1.price)); setP2Price(String(p2.price)); setP1DT(msToUtcParts(Number(p1.time) * 1000)); setP2DT(msToUtcParts(Number(p2.time) * 1000)); }} className="w-full text-left rounded-xl px-3 py-2.5 transition-all" style={{ background: selected ? "rgba(183,255,90,0.10)" : "rgba(13,28,22,0.6)", border: selected ? "1px solid rgba(183,255,90,0.45)" : "1px solid rgba(57,91,67,0.25)" }}><div className="flex items-center justify-between gap-2"><span className="text-[12px] font-bold text-white">{d.displayId || ("TL-" + String(d.id).padStart(3, "0"))}</span><span className="text-[9px] font-mono text-white/45">{d.timeframe}</span></div><div className="mt-1 flex gap-4 text-[10px] font-mono text-white/50"><span>P1 {Number(p1.price).toFixed(6)}</span><span>P2 {Number(p2.price).toFixed(6)}</span></div></button>;
+                    const displayId = d.displayId ?? (d as any).display_id ?? null;
+                    return <button key={d.id} type="button" onClick={() => { setSelectedDrawingId(d.id); setDrawingType(d.toolType === "ray" ? "ray" : "trendline"); const mappedTf = ({ "1":"1m", "5":"5m", "15":"15m", "30":"30m", "60":"1H", "120":"2H", "240":"4H", "D":"1D", "W":"1W" } as Record<string,string>)[String(d.timeframe)] ?? String(d.timeframe); setTimeframe(mappedTf); setP1Price(String(p1.price)); setP2Price(String(p2.price)); setP1DT(msToUtcParts(Number(p1.time) * 1000)); setP2DT(msToUtcParts(Number(p2.time) * 1000)); }} className="w-full text-left rounded-xl px-3 py-2.5 transition-all" style={{ background: selected ? "rgba(183,255,90,0.10)" : "rgba(13,28,22,0.6)", border: selected ? "1px solid rgba(183,255,90,0.45)" : "1px solid rgba(57,91,67,0.25)" }}><div className="flex items-center justify-between gap-2"><span className="text-[12px] font-bold text-white">{displayId ?? ("TL-" + String(d.id).padStart(3, "0"))}</span><span className="text-[9px] font-mono text-white/45">{d.timeframe}</span></div><div className="mt-1 flex gap-4 text-[10px] font-mono text-white/50"><span>P1 {Number(p1.price).toFixed(6)}</span><span>P2 {Number(p2.price).toFixed(6)}</span></div></button>;
                   })}
                 </div>
               )}
@@ -45,8 +43,7 @@ ${marker}`;
   s = s.replace(marker, block);
 }
 
-// Persist exactly the display ID rendered by the selected chart drawing.
-const displayIdExpr = '(selectedChartDrawing?.displayId ?? prefillDrawing?.displayId) ?? null';
+const displayIdExpr = 'selectedChartDisplayId ?? prefillDrawing?.displayId ?? (prefillDrawing as any)?.display_id ?? null';
 if (!s.includes('const selectedDrawingDisplayId =')) {
   const marker = '  const isHLine = drawingType === "horizontal_line";';
   if (!s.includes(marker)) throw new Error("Drawing type marker not found for display ID injection");
@@ -62,4 +59,4 @@ if (s.includes('drawingDisplayId:')) {
 }
 
 fs.writeFileSync(path, s);
-console.log("Live chart selector now uses chart selectedDrawingId and persistent displayId");
+console.log("Trendline alert selector now uses displayId/display_id from the selected chart drawing");
