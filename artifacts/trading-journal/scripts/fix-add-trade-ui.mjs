@@ -61,7 +61,7 @@ const replacement = `                    {/* Asset + Direction — TradingView-s
                                         key={item.id}
                                         type="button"
                                         onClick={() => { field.onChange(item.symbol); setAssetPickerOpen(false); }}
-                                        className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-left transition-colors ${field.value === item.symbol ? "bg-white/[0.09]" : "hover:bg-white/[0.05] active:bg-white/[0.08]"}`}
+                                        className={field.value === item.symbol ? "w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-left transition-colors bg-white/[0.09]" : "w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-left transition-colors hover:bg-white/[0.05] active:bg-white/[0.08]"}
                                       >
                                         <div className="min-w-0">
                                           <div className="text-[13px] font-semibold text-white">{item.symbol}</div>
