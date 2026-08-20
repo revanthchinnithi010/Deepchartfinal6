@@ -1,9 +1,7 @@
 import fs from "node:fs";
 
-const root = new URL("..", import.meta.url).pathname;
-
 function edit(rel, replacements) {
-  const path = new URL(rel, new URL("../", import.meta.url)).pathname;
+  const path = new URL(`../${rel}`, import.meta.url).pathname;
   let s = fs.readFileSync(path, "utf8");
   let changed = false;
   for (const [from, to] of replacements) {
@@ -21,8 +19,7 @@ function edit(rel, replacements) {
   }
 }
 
-// Drawing geometry: Point A is the circle center; Point B is a point on the
-// circumference. Radius is the pixel distance A→B, matching TradingView.
+// Point A is the circle center. Point B defines the radius in screen space.
 edit("src/components/charts/drawingCanvasRenderer.ts", [[
 `      case "ellipse": {
         if (px.length < 2) break;
@@ -40,8 +37,6 @@ edit("src/components/charts/drawingCanvasRenderer.ts", [[
       }`,
 `      case "ellipse": {
         if (px.length < 2) break;
-        // TradingView-style circle: first point is the center, second point
-        // defines the radius. Keep it circular in screen space.
         const cx = px[0].x, cy = px[0].y;
         const radius = Math.max(0.1, Math.hypot(px[1].x - px[0].x, px[1].y - px[0].y));
         ctx.beginPath();
@@ -62,10 +57,10 @@ edit("src/components/charts/DrawingOverlay.tsx", [
       if (pts.length < 2) return false;`,
 `    case "ellipse": {
       if (pts.length < 2) return false;
-      const cx = pts[0].x, cy = pts[0].y;
-      const radius = Math.max(1, Math.hypot(pts[1].x - cx, pts[1].y - cy));
-      return Math.abs(Math.hypot(cx - cx, cy - cy) - radius) < T ||
-        Math.abs(Math.hypot(cx - cx, cy - cy)) <= radius + T;
+      const ex = pts[0].x, ey = pts[0].y;
+      const radius = Math.max(1, Math.hypot(pts[1].x - ex, pts[1].y - ey));
+      const dist = Math.hypot(cx - ex, cy - ey);
+      return dist <= radius + T;
     }
     case "fib": {
       if (pts.length < 2) return false;`
@@ -96,7 +91,7 @@ edit("src/components/charts/DrawingOverlay.tsx", [
 ],
 [
 `    // ── 2-point / 3-point tools: TradingView click-click interaction ───────`,
-`    // ── TradingView-style circle/ellipse: press at the center, drag to radius, release ──
+`    // ── TradingView-style circle: press center, drag radius, release ───────
     if (activeTool === "ellipse") {
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       const pt = snapToOHLC(e.clientX, e.clientY, e.shiftKey);
