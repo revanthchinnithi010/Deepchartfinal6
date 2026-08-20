@@ -2,6 +2,8 @@
 // Crypto assets              →  Delta Exchange WebSocket
 // Forex / Indices / Metals / Commodities  →  cTrader ProtoOA
 
+import { useBrokerWatchlistStore } from "@/store/brokerWatchlistStore";
+
 export const DELTA_ASSETS    = ["BTCUSD", "ETHUSD", "SOLUSD", "DOGEUSD", "PEPEUSD", "BNBUSD"];
 export const CTRADER_ASSETS  = ["NAS100", "US30", "US500", "EURUSD", "XAUUSD", "USOIL"];
 
@@ -59,7 +61,31 @@ export const ASSET_CATEGORIES: Record<string, string[]> = {
   Crypto:      ["BTCUSD", "ETHUSD", "SOLUSD", "DOGEUSD", "PEPEUSD", "BNBUSD"],
 };
 
-export const ALL_SYMBOLS = Object.values(ASSET_CATEGORIES).flat();
+const FALLBACK_SYMBOLS = Object.values(ASSET_CATEGORIES).flat();
+
+// The Add Trade asset picker reads the same Zustand watchlist used by Markets
+// and Charts. A Proxy keeps the existing ALL_SYMBOLS.map(...) call sites intact
+// while making the list live instead of relying on the old hard-coded array.
+export const ALL_SYMBOLS: string[] = new Proxy([] as string[], {
+  get(_target, property) {
+    const watchlistSymbols = useBrokerWatchlistStore
+      .getState()
+      .items
+      .map(item => item.symbol)
+      .filter(Boolean);
+    const symbols = watchlistSymbols.length
+      ? Array.from(new Set(watchlistSymbols))
+      : FALLBACK_SYMBOLS;
+
+    if (property === "length") return symbols.length;
+    if (typeof property === "string" && /^\\d+$/.test(property)) {
+      return symbols[Number(property)];
+    }
+
+    const value = Reflect.get(symbols, property);
+    return typeof value === "function" ? value.bind(symbols) : value;
+  },
+});
 
 export const BROKER_OPTIONS = ["Delta Exchange", "FusionMarkets", "Groww"] as const;
 export type BrokerOption = typeof BROKER_OPTIONS[number];
