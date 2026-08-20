@@ -35,6 +35,16 @@
         } catch(e) {}
       })();
     </script>
+    <style>
+      @keyframes chart-route-spin { to { transform: rotate(360deg); } }
+      @keyframes chart-route-pulse { 0%,100% { opacity:.42; } 50% { opacity:1; } }
+      #chart-route-loader { position:fixed; inset:0; z-index:999990; display:none; align-items:center; justify-content:center; background:rgba(5,8,7,.94); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); opacity:1; transition:opacity 180ms ease; }
+      #chart-route-loader.is-visible { display:flex; }
+      #chart-route-loader.is-hiding { opacity:0; pointer-events:none; }
+      .chart-route-loader-inner { display:flex; flex-direction:column; align-items:center; gap:12px; }
+      .chart-route-loader-spinner { width:34px; height:34px; border-radius:50%; border:2px solid rgba(183,255,90,.16); border-top-color:#B7FF5A; animation:chart-route-spin .72s linear infinite; box-shadow:0 0 22px rgba(183,255,90,.14); }
+      .chart-route-loader-label { color:rgba(231,245,234,.82); font:600 12px/1.2 Inter,system-ui,sans-serif; letter-spacing:.02em; animation:chart-route-pulse 1.1s ease-in-out infinite; }
+    </style>
     <!-- Production API routing. The API service is deployed separately from the frontend. -->
     <script>
       (function () {
@@ -42,9 +52,7 @@
         try {
           var nativeFetch = window.fetch.bind(window);
           window.fetch = function (input, init) {
-            var url = typeof input === "string"
-              ? input
-              : (input && input.url ? input.url : String(input));
+            var url = typeof input === "string" ? input : (input && input.url ? input.url : String(input));
             if (url.indexOf("/api/") === 0) {
               var target = API_BASE + url;
               if (typeof input === "string") return nativeFetch(target, init);
@@ -52,9 +60,51 @@
             }
             return nativeFetch(input, init);
           };
-        } catch (e) {
-          console.warn("[api-routing] Could not install API routing fallback", e);
+        } catch (e) { console.warn("[api-routing] Could not install API routing fallback", e); }
+      })();
+    </script>
+    <script>
+      (function () {
+        var loader = null, hideTimer = null, lastPath = window.location.pathname;
+        var chartPaths = ['/charts'];
+        var sourcePaths = ['/', '/markets', '/trades', '/alerts'];
+        function ensureLoader() {
+          if (loader) return loader;
+          loader = document.createElement('div');
+          loader.id = 'chart-route-loader';
+          loader.innerHTML = '<div class="chart-route-loader-inner" role="status" aria-live="polite"><div class="chart-route-loader-spinner"></div><div class="chart-route-loader-label">Opening chart…</div></div>';
+          document.body.appendChild(loader);
+          return loader;
         }
+        function hideLoader() {
+          if (!loader) return;
+          loader.classList.remove('is-visible');
+          loader.classList.add('is-hiding');
+          window.clearTimeout(hideTimer);
+          hideTimer = window.setTimeout(function () {
+            if (loader) loader.style.display = 'none';
+            if (loader) loader.classList.remove('is-hiding');
+          }, 190);
+        }
+        function showChartLoader(fromPath, toPath) {
+          if (!chartPaths.includes(toPath) || !sourcePaths.includes(fromPath)) return;
+          var el = ensureLoader();
+          window.clearTimeout(hideTimer);
+          el.style.display = 'flex';
+          el.classList.remove('is-hiding');
+          el.classList.add('is-visible');
+          window.setTimeout(hideLoader, 620);
+        }
+        function routeChanged() {
+          var nextPath = window.location.pathname;
+          if (nextPath !== lastPath) { showChartLoader(lastPath, nextPath); lastPath = nextPath; }
+        }
+        try {
+          var originalPushState = history.pushState, originalReplaceState = history.replaceState;
+          history.pushState = function () { var result = originalPushState.apply(this, arguments); routeChanged(); return result; };
+          history.replaceState = function () { var result = originalReplaceState.apply(this, arguments); routeChanged(); return result; };
+          window.addEventListener('popstate', routeChanged);
+        } catch (e) { console.warn('[chart-route-loader] Could not install navigation hooks', e); }
       })();
     </script>
     <script>
@@ -76,16 +126,9 @@
             '<button onclick="window.location.reload()" style="margin-top:4px;padding:8px 18px;border-radius:8px;border:1px solid #3f3f46;background:#27272a;color:#f4f4f5;font-size:13px;cursor:pointer;">Reload</button>' +
             '</div>';
         }
-        window.addEventListener('error', function (e) {
-          showBootError('A script error occurred before the app finished loading.', (e.error && e.error.stack) || e.message);
-        });
-        window.addEventListener('unhandledrejection', function (e) {
-          var reason = e.reason;
-          showBootError('An unhandled promise rejection occurred before the app finished loading.', (reason && reason.stack) || reason);
-        });
-        window.setTimeout(function () {
-          showBootError('The app did not finish loading in time.', 'Nothing rendered into #root within 15s of page load.');
-        }, 15000);
+        window.addEventListener('error', function (e) { showBootError('A script error occurred before the app finished loading.', (e.error && e.error.stack) || e.message); });
+        window.addEventListener('unhandledrejection', function (e) { var reason = e.reason; showBootError('An unhandled promise rejection occurred before the app finished loading.', (reason && reason.stack) || reason); });
+        window.setTimeout(function () { showBootError('The app did not finish loading in time.', 'Nothing rendered into #root within 15s of page load.'); }, 15000);
       })();
     </script>
   </head>
