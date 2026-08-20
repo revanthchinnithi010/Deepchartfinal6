@@ -107,6 +107,10 @@ edit("src/components/charts/DrawingOverlay.tsx", [
     // ── 2-point / 3-point tools: TradingView click-click interaction ───────`
 ],
 [
+`    if (!isDrawMode || activeTool === "eraser") return;\n\n    // ── Mobile 2-point crosshair drag`,
+`    if (!isDrawMode || activeTool === "eraser") return;\n\n    // ── TradingView-style circle live preview while the radius is being dragged\n    if (activeTool === "ellipse" && isDragging.current) {\n      const pt = snapToOHLC(e.clientX, e.clientY, e.shiftKey);\n      if (pt) setMousePoint(pt);\n      return;\n    }\n\n    // ── Mobile 2-point crosshair drag`
+],
+[
 `    // ── 2-point / 3-point tools: click-click commit ───────────────────────
     // This fires on EVERY pointerUp. We use distance from anchor to discriminate:`,
 `    // ── TradingView-style circle commit ───────────────────────────────────
