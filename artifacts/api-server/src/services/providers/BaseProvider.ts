@@ -105,6 +105,14 @@ export abstract class BaseProvider extends EventEmitter {
   }
 
   protected onTick(tick: ProviderTick): void {
+    // Final provider boundary: BTCUSD live ticks are Bybit-only.
+    // Any cTrader/other-provider BTCUSD tick is dropped before it can reach
+    // MarketFeedManager, candles, alerts, persistence, or the frontend.
+    if (tick.symbol.toUpperCase().trim() === "BTCUSD" && tick.provider !== "bybit") {
+      logger.debug({ provider: tick.provider, symbol: tick.symbol }, "Provider tick dropped: BTCUSD is Bybit-only");
+      return;
+    }
+
     const now = Date.now();
     this.tickCount++;
     this.lastTickAt = now;
