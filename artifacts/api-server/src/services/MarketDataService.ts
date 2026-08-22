@@ -81,7 +81,12 @@ export class MarketDataService extends EventEmitter {
 
     const cryptoSymbols = defaultSymbols.filter(isCryptoSymbol);
     for (const symbol of cryptoSymbols) this.bybitProvider.subscribe(symbol);
-    if (cryptoSymbols.length > 0) this.bybitProvider.connect();
+
+    // Always bring up the Bybit transport during server startup. Persistent
+    // watchlist restoration and browser subscriptions can happen after startup;
+    // an already-open transport avoids a startup race where the frontend sees
+    // "offline" before the first symbol subscription arrives.
+    this.bybitProvider.connect();
 
     logger.info(
       { symbols: defaultSymbols, nonCryptoSymbols, cryptoSymbols },
