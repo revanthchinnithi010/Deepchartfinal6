@@ -4,6 +4,8 @@ import { logger } from "../../lib/logger.js";
 
 const BYBIT_PUBLIC_WS = "wss://stream.bybit.com/v5/public/linear";
 const PING_INTERVAL_MS = 20_000;
+const SOCKET_IDLE_TIMEOUT_MS = 50_000;
+const HEALTH_CHECK_INTERVAL_MS = 10_000;
 
 interface BybitTrade { T?: number; p?: string; v?: string; S?: string; s?: string; }
 interface BybitMessage {
@@ -37,6 +39,8 @@ export class BybitProvider extends BaseProvider {
 
   private ws: WebSocket | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private lastMessageAt = 0;
   private internalToBybit = new Map<string, string>();
   private bybitToInternal = new Map<string, string>();
   private subscribedBybit = new Set<string>();
@@ -63,21 +67,45 @@ export class BybitProvider extends BaseProvider {
   }
 
   connect(): void {
-    if (this.destroyed || this.ws?.readyState === WebSocket.OPEN) return;
+    if (this.destroyed) return;
+    const state = this.ws?.readyState;
+    if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
+
     this.clearReconnectTimer();
     this.clearPing();
-    logger.info({ provider: this.name, url: BYBIT_PUBLIC_WS }, "BybitProvider: connecting");
-    this.ws = new WebSocket(BYBIT_PUBLIC_WS, { handshakeTimeout: 10_000 });
+    this.clearHealth();
+    this.subscribedBybit.clear();
+    this.ws = null;
+    this.lastMessageAt = Date.now();
 
-    this.ws.on("open", () => {
+    logger.info({ provider: this.name, url: BYBIT_PUBLIC_WS }, "BybitProvider: connecting");
+    const ws = new WebSocket(BYBIT_PUBLIC_WS, { handshakeTimeout: 10_000 });
+    this.ws = ws;
+
+    ws.on("open", () => {
+      if (this.ws !== ws || this.destroyed) {
+        try { ws.close(); } catch { /* ignore */ }
+        return;
+      }
+      this.lastMessageAt = Date.now();
       this.onConnected();
       this.pingTimer = setInterval(() => {
-        if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ op: "ping" }));
+        if (this.ws !== ws || ws.readyState !== WebSocket.OPEN) return;
+        try { ws.send(JSON.stringify({ op: "ping" })); } catch { /* close path handles recovery */ }
       }, PING_INTERVAL_MS);
+      this.healthTimer = setInterval(() => {
+        if (this.ws !== ws || ws.readyState !== WebSocket.OPEN) return;
+        if (Date.now() - this.lastMessageAt > SOCKET_IDLE_TIMEOUT_MS) {
+          logger.warn({ provider: this.name, idleMs: Date.now() - this.lastMessageAt }, "BybitProvider: socket idle, forcing reconnect");
+          try { ws.close(); } catch { /* ignore */ }
+        }
+      }, HEALTH_CHECK_INTERVAL_MS);
       logger.info({ provider: this.name, subscriptions: [...this.subscriptions] }, "BybitProvider: websocket ready");
     });
 
-    this.ws.on("message", raw => {
+    ws.on("message", raw => {
+      if (this.ws !== ws) return;
+      this.lastMessageAt = Date.now();
       try {
         const msg = JSON.parse(raw.toString()) as BybitMessage;
         if (msg.type === "COMMAND_RESP" || msg.op === "pong") return;
@@ -115,12 +143,19 @@ export class BybitProvider extends BaseProvider {
       }
     });
 
-    this.ws.on("error", (err: Error) => {
+    ws.on("error", (err: Error) => {
+      if (this.ws !== ws) return;
       logger.warn({ provider: this.name, err: err.message }, "BybitProvider: websocket error");
       this.onError(err);
+      try { ws.close(); } catch { /* close event drives reconnect */ }
     });
-    this.ws.on("close", (code, reason) => {
+
+    ws.on("close", (code, reason) => {
+      if (this.ws !== ws) return;
       this.clearPing();
+      this.clearHealth();
+      this.subscribedBybit.clear();
+      this.ws = null;
       logger.warn({ provider: this.name, code, reason: reason.toString() }, "BybitProvider: websocket closed");
       this.onDisconnected(code);
     });
@@ -141,8 +176,14 @@ export class BybitProvider extends BaseProvider {
     this.bybitToInternal.set(bybit, internal);
     if (this.ws?.readyState === WebSocket.OPEN && !this.subscribedBybit.has(bybit)) {
       this.subscribedBybit.add(bybit);
-      this.ws.send(JSON.stringify({ op: "subscribe", args: [`publicTrade.${bybit}`] }));
-      logger.info({ provider: this.name, symbol: internal, providerSymbol: bybit }, "BybitProvider: auto-subscribed public trade stream");
+      try {
+        this.ws.send(JSON.stringify({ op: "subscribe", args: [`publicTrade.${bybit}`] }));
+        logger.info({ provider: this.name, symbol: internal, providerSymbol: bybit }, "BybitProvider: auto-subscribed public trade stream");
+      } catch (err) {
+        this.subscribedBybit.delete(bybit);
+        logger.warn({ provider: this.name, symbol: internal, err }, "BybitProvider: subscription send failed");
+        try { this.ws.close(); } catch { /* reconnect path */ }
+      }
     }
   }
 
@@ -152,7 +193,7 @@ export class BybitProvider extends BaseProvider {
     if (!bybit) return;
     this.subscribedBybit.delete(bybit);
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ op: "unsubscribe", args: [`publicTrade.${bybit}`] }));
+      try { this.ws.send(JSON.stringify({ op: "unsubscribe", args: [`publicTrade.${bybit}`] })); } catch { /* ignore */ }
     }
   }
 
@@ -160,12 +201,18 @@ export class BybitProvider extends BaseProvider {
     this.destroyed = true;
     this.clearReconnectTimer();
     this.clearPing();
+    this.clearHealth();
     this.subscribedBybit.clear();
-    this.ws?.close();
+    const ws = this.ws;
     this.ws = null;
+    try { ws?.close(); } catch { /* ignore */ }
   }
 
   private clearPing(): void {
     if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
+  }
+
+  private clearHealth(): void {
+    if (this.healthTimer) { clearInterval(this.healthTimer); this.healthTimer = null; }
   }
 }
