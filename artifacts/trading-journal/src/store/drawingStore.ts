@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Drawing, ToolType, DrawingStyle } from "@/types/drawing";
-import { DEFAULT_STYLE, pointsNeeded, isFreehand } from "@/types/drawing";
+import { DEFAULT_STYLE } from "@/types/drawing";
 
 const MAX_HISTORY    = 50;
 const DELETED_LS_KEY = "tv_deleted_drawing_ids";
@@ -42,63 +42,6 @@ function persistDeletedId(id: number) {
   } catch { /* ignore */ }
 }
 
-/**
- * Desktop / landscape layout does not have the mobile crosshair-seeding effect.
- * DrawingOverlay hides the two crosshair SVG lines whenever activeTool changes
- * and normally reveals them only from pointermove. Seed the actual SVG lines
- * after React has committed the selected 2-point drawing tool so the first frame
- * matches the vertical/mobile drawing experience.
- */
-function seedDrawingCrosshairAfterToolSelect(tool: ToolType): void {
-  if (
-    tool === "cursor" ||
-    tool === "eraser" ||
-    typeof window === "undefined" ||
-    pointsNeeded(tool) !== 2 ||
-    isFreehand(tool)
-  ) return;
-
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      try {
-        const lines = Array.from(document.querySelectorAll<SVGLineElement>("svg line"));
-
-        const hLine = lines.find(line =>
-          line.getAttribute("x1") === "0" &&
-          line.getAttribute("x2") === "100%" &&
-          line.getAttribute("y1") === "0" &&
-          line.getAttribute("y2") === "0"
-        );
-        const vLine = lines.find(line =>
-          line.getAttribute("x1") === "0" &&
-          line.getAttribute("x2") === "0" &&
-          line.getAttribute("y1") === "0" &&
-          line.getAttribute("y2") === "100%"
-        );
-
-        if (!hLine || !vLine) return;
-
-        const svg = hLine.closest("svg");
-        const rect = svg?.getBoundingClientRect();
-        if (!rect || rect.width <= 0 || rect.height <= 0) return;
-
-        const cx = rect.width / 2;
-        const cy = rect.height * 0.4;
-
-        hLine.setAttribute("y1", String(cy));
-        hLine.setAttribute("y2", String(cy));
-        hLine.style.display = "";
-
-        vLine.setAttribute("x1", String(cx));
-        vLine.setAttribute("x2", String(cx));
-        vLine.style.display = "";
-      } catch {
-        // Best-effort DOM enhancement; drawing functionality must remain unaffected.
-      }
-    });
-  });
-}
-
 interface DrawingStore {
   activeTool: ToolType;
   setActiveTool: (tool: ToolType) => void;
@@ -138,7 +81,6 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
       isDrawing: false,
       ...(savedStyle ? { activeStyle: savedStyle } : {}),
     });
-    seedDrawingCrosshairAfterToolSelect(tool);
   },
 
   stayInDraw: false,
