@@ -217,7 +217,24 @@ function hitTestDrawingAtPx(
     }
     default:
       if (pts.length === 1) return Math.hypot(cx - pts[0].x, cy - pts[0].y) < T;
-      if (pts.length >= 2) return distToSeg({ x: cx, y: cy }, pts[0], pts[pts.length - 1]) < T;
+      if (pts.length >= 2) {
+        // Ray visuals start at Point A and extend to the right edge. The old
+        // hit-test only checked the finite A→B segment, so taps on the
+        // extended portion could not select the ray.
+        if (d.toolType === "ray") {
+          const a = pts[0];
+          const b = pts[1];
+          if (Math.abs(b.x - a.x) < 0.5) {
+            // Match extendRight(): vertical rays extend upward from Point A.
+            return Math.abs(cx - a.x) < T && cy <= a.y + T;
+          }
+          if (cx < a.x - T) return false;
+          const slope = (b.y - a.y) / (b.x - a.x);
+          const expectedY = a.y + slope * (cx - a.x);
+          return Math.abs(cy - expectedY) < T;
+        }
+        return distToSeg({ x: cx, y: cy }, pts[0], pts[pts.length - 1]) < T;
+      }
       return false;
   }
 }
