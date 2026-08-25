@@ -1,0 +1,50 @@
+name: Fix ray extended selection hit area
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[ray-hit-fixed]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Patch Ray hit-test
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx';
+          let s = fs.readFileSync(path, 'utf8');
+
+          const old = `    default:\n      if (pts.length === 1) return Math.hypot(cx - pts[0].x, cy - pts[0].y) < T;\n      if (pts.length >= 2) return distToSeg({ x: cx, y: cy }, pts[0], pts[pts.length - 1]) < T;\n      return false;\n`;
+
+          const next = `    default:\n      if (pts.length === 1) return Math.hypot(cx - pts[0].x, cy - pts[0].y) < T;\n      if (pts.length >= 2) {\n        // Ray visuals start at Point A and extend to the right edge. The old\n        // hit-test only checked the finite A→B segment, so taps on the\n        // extended portion could not select the ray.\n        if (d.toolType === "ray") {\n          const a = pts[0];\n          const b = pts[1];\n          if (Math.abs(b.x - a.x) < 0.5) {\n            // Match extendRight(): vertical rays extend upward from Point A.\n            return Math.abs(cx - a.x) < T && cy <= a.y + T;\n          }\n          if (cx < a.x - T) return false;\n          const slope = (b.y - a.y) / (b.x - a.x);\n          const expectedY = a.y + slope * (cx - a.x);\n          return Math.abs(cy - expectedY) < T;\n        }\n        return distToSeg({ x: cx, y: cy }, pts[0], pts[pts.length - 1]) < T;\n      }\n      return false;\n`;
+
+          if (!s.includes(old)) throw new Error('Expected hit-test block not found');
+          s = s.replace(old, next, 1);
+          fs.writeFileSync(path, s);
+          console.log('Ray extended hit-test patched');
+          NODE
+
+      - name: Validate patch
+        run: |
+          grep -q 'if (d.toolType === "ray")' artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
+          grep -q 'Ray visuals start at Point A and extend to the right edge' artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
+
+      - name: Commit patch and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
+          git commit -m "fix: select ray from extended line area [ray-hit-fixed]"
+          git rm .github/workflows/fix-ray-selection-hit.yml
+          git commit -m "remove temporary ray selection patch workflow [ray-hit-fixed]"
+          git push
