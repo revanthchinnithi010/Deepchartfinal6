@@ -21,11 +21,11 @@ object VoiceSpeaker {
                     val engine = tts ?: return@TextToSpeech
                     ready = true
                     engine.language = Locale.US
-                    engine.setSpeechRate(0.82f)
+                    engine.setSpeechRate(0.76f)
                     engine.setPitch(1.0f)
                     engine.setAudioAttributes(
                         AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
                             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                             .build()
                     )
@@ -41,14 +41,15 @@ object VoiceSpeaker {
     }
 
     private fun speakNow(engine: TextToSpeech, text: String) {
-        // Spell the trendline ID slowly so Android voices do not merge the digits.
+        // Expand the trendline ID into separated words so Android TTS does not merge letters/digits.
         val clearText = text
             .replace(Regex("TL-(\\d+)")) { match ->
-                "T L, ${match.groupValues[1].map { digit -> digitName(digit) }.joinToString(" ")},"
+                "T L ${match.groupValues[1].map { digit -> digitName(digit) }.joinToString(" ")}"
             }
             .replace("Touched", "Touched.")
             .replace("Broken", "Broken.")
             .replace("Retested", "Retested.")
+            .replace("Hello,", "Hello.")
 
         val params = Bundle().apply {
             putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
