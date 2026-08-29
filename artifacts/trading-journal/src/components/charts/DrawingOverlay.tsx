@@ -757,6 +757,19 @@ const DrawingShape = memo(function DrawingShape({
 
     case "channel": {
       if (px.length < 2) return null;
+      // TradingView-style channel interaction: after Point 1 and Point 2,
+      // show only the base trendline. Do not invent a channel width until
+      // Point 3 has actually been placed; the third point controls the offset.
+      if (px.length === 2) {
+        const d = extendBothEnds(px[0], px[1], W, H);
+        return (
+          <g opacity={op} {...eraseClick}>
+            <Glow d={d} />
+            <path d={d} stroke="transparent" strokeWidth={HIT} fill="none" {...hitProps} />
+            <path d={d} stroke={col} strokeWidth={sw} strokeDasharray={dash} fill="none" />
+          </g>
+        );
+      }
       const dx=px[1].x-px[0].x,dy=px[1].y-px[0].y,len=Math.hypot(dx,dy)||1;
       const channelWidth=px.length>=3?((px[2].x-px[0].x)*(-dy)+(px[2].y-px[0].y)*dx)/len:Math.min(H*0.12,60);
       const [c0,c1]=parallelOffset(px[0],px[1],channelWidth);
