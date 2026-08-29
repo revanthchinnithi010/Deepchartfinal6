@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const target = resolve("artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx");
+// Railway runs package scripts with artifacts/trading-journal as cwd.
+const target = resolve("src/components/charts/DrawingOverlay.tsx");
 let source = readFileSync(target, "utf8");
 
 const oldSimple = /const d1\s*=\s*extendBothEnds\(px\[0\],\s*px\[1\],\s*W,\s*H\);\s*const d2\s*=\s*extendBothEnds\(c0,\s*c1,\s*W,\s*H\);/;
@@ -25,5 +26,5 @@ if (!changed && !source.includes("const d1 = extendRight(px[0], px[1], W);")) {
 
 if (changed) {
   writeFileSync(target, source);
-  console.log("channel rails now start at Point 1 and extend right only");
+  console.log("[channel-fix] rails now start at Point 1 and extend right only");
 }
