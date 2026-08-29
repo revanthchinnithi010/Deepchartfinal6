@@ -1,8 +1,8 @@
 name: Apply channel third-point crosshair fix
 
 on:
-  pull_request:
-    types: [opened, synchronize]
+  push:
+    branches: [main]
 
 permissions:
   contents: write
@@ -12,8 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
       - name: Patch Point 2 to Point 3 interaction
         env:
           TARGET: artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
@@ -53,7 +51,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
           git diff --cached --quiet || git commit -m "fix: keep channel crosshair active for third point"
-          git push origin HEAD:${{ github.head_ref }}
+          git push
           git rm .github/workflows/fix-shared-drawing-crosshair.yml
           git commit -m "chore: remove temporary channel fix workflow"
-          git push origin HEAD:${{ github.head_ref }}
+          git push
