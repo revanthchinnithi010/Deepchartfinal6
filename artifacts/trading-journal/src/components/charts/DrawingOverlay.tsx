@@ -201,13 +201,13 @@ function hitTestDrawingAtPx(
         Math.abs(cy - y1) < T || Math.abs(cy - y2) < T
       );
     }
-    case "channel":
+    case "channel": {
       if (pts.length < 2) return false;
-      return (
-        distToSeg({ x: cx, y: cy }, pts[0], pts[1]) < T ||
-        (pts.length >= 4 ? distToSeg({ x: cx, y: cy }, pts[2], pts[3]) < T : false) ||
-        (pts.length >= 3 ? distToSeg({ x: cx, y: cy }, pts[1], pts[2]) < T : false)
-      );
+      const dx=pts[1].x-pts[0].x, dy=pts[1].y-pts[0].y, len=Math.hypot(dx,dy)||1;
+      const off=pts.length>=3?((pts[2].x-pts[0].x)*(-dy)+(pts[2].y-pts[0].y)*dx)/len:0;
+      const [c0,c1]=parallelOffset(pts[0],pts[1],off);
+      return distToSeg({x:cx,y:cy},pts[0],pts[1])<T || (pts.length>=3 && distToSeg({x:cx,y:cy},c0,c1)<T) || (pts.length>=3 && Math.hypot(cx-pts[2].x,cy-pts[2].y)<T*1.2);
+    }
     case "fib": {
       if (pts.length < 2) return false;
       for (const lv of [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.618]) {
@@ -757,8 +757,9 @@ const DrawingShape = memo(function DrawingShape({
 
     case "channel": {
       if (px.length < 2) return null;
-      const channelWidth = Math.min(H * 0.12, 60);
-      const [c0, c1] = parallelOffset(px[0], px[1], channelWidth);
+      const dx=px[1].x-px[0].x,dy=px[1].y-px[0].y,len=Math.hypot(dx,dy)||1;
+      const channelWidth=px.length>=3?((px[2].x-px[0].x)*(-dy)+(px[2].y-px[0].y)*dx)/len:Math.min(H*0.12,60);
+      const [c0,c1]=parallelOffset(px[0],px[1],channelWidth);
       const d1 = extendBothEnds(px[0], px[1], W, H);
       const d2 = extendBothEnds(c0, c1, W, H);
       return (
@@ -774,6 +775,7 @@ const DrawingShape = memo(function DrawingShape({
           <circle cx={px[1].x} cy={px[1].y} r={3.5} fill={col} opacity={isSelected ? 0 : 0.85} />
           <Anchor i={0} p={px[0]} />
           <Anchor i={1} p={px[1]} />
+          {px.length>=3 && <Anchor i={2} p={px[2]} />}
         </g>
       );
     }
@@ -2511,12 +2513,13 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   }, [chart]);
 
   // ── Drawing phase state ────────────────────────────────────────────────────
-  const [phase,      setPhase]      = useState<"idle" | "dragging" | "placed_first">("idle");
+  const [phase,      setPhase]      = useState<"idle" | "dragging" | "placed_first" | "placed_second">("idle");
   const [anchor,     setAnchor]     = useState<DrawingPoint | null>(null);
   const [mousePoint, setMousePoint] = useState<DrawingPoint | null>(null);
+  const channelSecondRef = useRef<DrawingPoint | null>(null);
   const isDragging                  = useRef(false);
   // Tracks click-click phase for 2-pt tools: 0=no first point, 1=first point placed
-  const clickPhaseRef               = useRef<0 | 1>(0);
+  const clickPhaseRef               = useRef<0 | 1 | 2>(0);
   // Direct-DOM crosshair refs — updated on every mousemove without React re-renders
   const xhairHRef                   = useRef<SVGLineElement | null>(null);
   const xhairVRef                   = useRef<SVGLineElement | null>(null);
@@ -3706,6 +3709,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     // Right-click always cancels in-progress drawing
     if (e.button === 2) {
       setPhase("idle"); setAnchor(null); setMousePoint(null); setIsDrawing(false);
+      channelSecondRef.current = null;
       clickPhaseRef.current = 0;
       return;
     }
@@ -3761,10 +3765,18 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     }
 
     // ── 2-point / 3-point tools: TradingView click-click interaction ───────
+    if (activeTool === "channel") {
+      const p = snapToOHLC(e.clientX,e.clientY,e.shiftKey);
+      if (!p) return;
+      if (clickPhaseRef.current===0) { setAnchor(p);setMousePoint(p);setPhase("placed_first");setIsDrawing(true);clickPhaseRef.current=1; }
+      else if (clickPhaseRef.current===1) { channelSecondRef.current=p;setMousePoint(p);setPhase("placed_second");clickPhaseRef.current=2; }
+      else setMousePoint(p);
+      return;
+    }
 
     // ── Mobile: crosshair-drag model — save anchor, do NOT place point yet ─
     // Point placement happens in onPointerUp only when the lift is a tap (<10px).
-    if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) {
+    if (isMobile && pointsNeeded(activeTool) >= 2 && pointsNeeded(activeTool) <= 3 && !isFreehand(activeTool)) {
       const overlay = overlayRef.current;
       if (!overlay) return;
       const cx = mobileDrawCrossPx.current?.x ?? (overlay.clientWidth  / 2);
@@ -3797,7 +3809,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     // Only update crosshair while an active drag is in progress.
     // When no drag is active (finger lifted), the crosshair stays at its last
     // position — it never follows raw finger coordinates.
-    if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) {
+    if (isMobile && pointsNeeded(activeTool) >= 2 && pointsNeeded(activeTool) <= 3 && !isFreehand(activeTool)) {
       const overlay = overlayRef.current;
       const drag    = mobileDrawDragAnchor.current;
       if (overlay && drag) {
@@ -3924,7 +3936,11 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       const pt   = fromPx(rect.left + crossPx.x, rect.top + crossPx.y);
       if (!pt) return;
 
-      if (clickPhaseRef.current === 0) {
+      if (activeTool === "channel") {
+        if (clickPhaseRef.current===0) { setAnchor(pt);setMousePoint(pt);setPhase("placed_first");setIsDrawing(true);clickPhaseRef.current=1; }
+        else if (clickPhaseRef.current===1) { channelSecondRef.current=pt;setMousePoint(pt);setPhase("placed_second");clickPhaseRef.current=2; }
+        else if (channelSecondRef.current) { await saveDrawing([anchor!,channelSecondRef.current,pt]);channelSecondRef.current=null;setAnchor(null);setMousePoint(null);setPhase("idle");setIsDrawing(false);clickPhaseRef.current=0;if(!useDrawingStore.getState().stayInDraw)setActiveTool("cursor"); }
+      } else if (clickPhaseRef.current === 0) {
         // First tap → place Point A
         setAnchor(pt);
         setMousePoint(pt);
@@ -3973,6 +3989,13 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       return;
     }
 
+    if (activeTool === "channel") {
+      if (clickPhaseRef.current!==2 || !anchor || !channelSecondRef.current) return;
+      const p3=snapToOHLC(e.clientX,e.clientY,e.shiftKey); if(!p3) return;
+      await saveDrawing([anchor,channelSecondRef.current,p3]);
+      channelSecondRef.current=null;setAnchor(null);setMousePoint(null);setPhase("idle");setIsDrawing(false);clickPhaseRef.current=0;if(!useDrawingStore.getState().stayInDraw)setActiveTool("cursor");
+      return;
+    }
     if (clickPhaseRef.current !== 1) return;
 
     const pt = snapToOHLC(e.clientX, e.clientY, e.shiftKey);
@@ -4137,10 +4160,10 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   // so clientWidth already equals the drawable chart area — no further subtraction needed.
   const chartRight = W;
 
+  const previewPts = activeTool === "channel" && channelSecondRef.current && mousePoint ? [anchor!,channelSecondRef.current,mousePoint] : [anchor!,mousePoint!];
   const previewDrawing: Drawing | null =
-    (phase === "dragging" || phase === "placed_first") && anchor && mousePoint && activeTool !== "eraser" && pointsNeeded(activeTool) === 2
-      ? { id: -1, symbol, timeframe, toolType: activeTool, points: [anchor, mousePoint], style: activeStyle, isLocked: false, isVisible: true, createdAt: "" }
-      : null;
+    (phase === "dragging" || phase === "placed_first" || phase === "placed_second") && anchor && mousePoint && activeTool !== "eraser" && pointsNeeded(activeTool) >= 2
+      ? { id:-1,symbol,timeframe,toolType:activeTool,points:previewPts as DrawingPoint[],style:activeStyle,isLocked:false,isVisible:true,createdAt:"" } : null;
 
   const eraserActive = activeTool === "eraser";
   const cursorMode   = activeTool === "cursor";

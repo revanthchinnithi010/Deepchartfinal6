@@ -640,7 +640,9 @@ export function renderDrawingsToCanvas(
 
       case "channel": {
         if (px.length < 2) break;
-        const cW = Math.min(H * 0.12, 60);
+        const dx = px[1].x - px[0].x, dy = px[1].y - px[0].y;
+        const len = Math.hypot(dx, dy) || 1;
+        const cW = px.length >= 3 ? ((px[2].x-px[0].x)*(-dy)+(px[2].y-px[0].y)*dx)/len : Math.min(H*0.12,60);
         const [c0, c1] = parallelOffset(px[0], px[1], cW);
         const [a1, b1] = extendBothEnds(px[0], px[1], W, H);
         const [a2, b2] = extendBothEnds(c0, c1, W, H);
@@ -657,6 +659,7 @@ export function renderDrawingsToCanvas(
         ctx.save(); ctx.shadowBlur = 0; ctx.globalAlpha *= 0.6; drawLine(ctx, a2, b2); ctx.restore();
         dot(ctx, px[0].x, px[0].y, 3.5, col);
         dot(ctx, px[1].x, px[1].y, 3.5, col);
+        if (px.length >= 3) dot(ctx, px[2].x, px[2].y, 3.5, col);
         break;
       }
 

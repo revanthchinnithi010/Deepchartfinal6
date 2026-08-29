@@ -83,5 +83,6 @@ export function isFreehand(tool: ToolType): boolean {
 export function pointsNeeded(tool: ToolType): number {
   if (tool === "hline" || tool === "hray" || tool === "vline" || tool === "eraser" || tool === "text" || tool === "note") return 1;
   if (isFreehand(tool)) return Infinity;
+  if (tool === "channel") return 3;
   return 2;
 }
