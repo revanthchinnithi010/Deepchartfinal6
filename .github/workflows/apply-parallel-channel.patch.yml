@@ -1,0 +1,29 @@
+name: Apply Parallel Channel Patch
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, '[apply-channel-patch]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch channel implementation
+        run: python3 scripts/apply_parallel_channel_patch.py
+      - name: Commit patched implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add artifacts/trading-journal/src/types/drawing.ts artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx artifacts/trading-journal/src/components/charts/drawingCanvasRenderer.ts
+          git diff --cached --quiet && exit 0
+          git commit -m 'feat: make parallel channel TradingView-style'
+          git push
+      - name: Remove patch tooling
+        run: |
+          rm -f .github/workflows/apply-parallel-channel.patch.yml scripts/apply_parallel_channel_patch.py
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m 'chore: remove temporary channel patch tooling'
+          git push
