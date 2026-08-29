@@ -1,4 +1,4 @@
-name: Apply shared drawing crosshair fix
+name: Apply channel third-point crosshair fix
 
 on:
   push:
@@ -12,89 +12,57 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Patch DrawingOverlay
+      - name: Patch Point 2 to Point 3 interaction
         env:
           TARGET: artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re, os
-
+          import os
           path = Path(os.environ['TARGET'])
           s = path.read_text()
 
-          # Shared React-owned crosshair position. No SVG DOM querying or RAF seeding.
-          needle = 'const [mousePoint, setMousePoint] = useState<DrawingPoint | null>(null);'
-          if 'const [drawCrosshairPx, setDrawCrosshairPx]' not in s:
-              s = s.replace(needle, needle + '\n  const [drawCrosshairPx, setDrawCrosshairPx] = useState<Px | null>(null);', 1)
+          old = '''        else if (clickPhaseRef.current===1) { channelSecondRef.current=pt;setMousePoint(pt);setPhase("placed_second");clickPhaseRef.current=2; }'''
+          new = '''        else if (clickPhaseRef.current===1) {
+          channelSecondRef.current=pt;
+          setMousePoint(pt);
+          setPhase("placed_second");
+          clickPhaseRef.current=2;
+          // Point 2 is only the baseline. Keep the full-span crosshair visible
+          // so the next vertical drag can position Point 3.
+          if (xhairHRef.current) xhairHRef.current.style.display = "";
+          if (xhairVRef.current) xhairVRef.current.style.display = "";
+        }'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif 'channelSecondRef.current=pt;setMousePoint(pt);setPhase("placed_second");clickPhaseRef.current=2;' not in s:
+              raise SystemExit('Point 2 channel branch not found')
 
-          # Remove the old direct SVG-line refs.
-          s = re.sub(r'\n\s*// Direct-DOM crosshair refs.*?\n\s*const xhairVRef\s*=\s*useRef<SVGLineElement \| null>\(null\);\n', '\n', s, count=1, flags=re.S)
+          old_guard = 'if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) return;'
+          new_guard = 'if (isMobile && activeTool === "channel" && !isFreehand(activeTool)) return;'
+          if old_guard in s:
+              s = s.replace(old_guard, new_guard, 1)
 
-          # Active-tool reset: clear React crosshair state.
-          s = re.sub(r'if \(xhairHRef\.current\) xhairHRef\.current\.style\.display = "none";\s*\n\s*if \(xhairVRef\.current\) xhairVRef\.current\.style\.display = "none";', 'setDrawCrosshairPx(null);', s, count=1)
-
-          # The old "mobile" initializer is now the shared 2-point initializer.
-          s = s.replace('  // ── Mobile: show crosshair immediately when a 2-point draw tool is selected ──',
-                        '  // ── Shared 2-point drawing crosshair initializer ──', 1)
-          s = s.replace('    if (!isMobile) return;\n    if (activeTool === "cursor"',
-                        '    if (activeTool === "cursor"', 1)
-          s = s.replace('    mobileDrawCrossPx.current = { x: cx, y: cy };',
-                        '    mobileDrawCrossPx.current = { x: cx, y: cy };\n    setDrawCrosshairPx({ x: cx, y: cy });', 1)
-
-          # Remove old initializer DOM writes; state now renders the lines.
-          s = re.sub(r'\n\s*if \(xhairHRef\.current\) \{.*?\n\s*\}\s*\n\s*if \(xhairVRef\.current\) \{.*?\n\s*\}\s*', '\n', s, count=1, flags=re.S)
-
-          # Shared drawing interaction: use the existing mobile relative-drag state machine
-          # in both orientations.
-          s = s.replace('if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) {',
-                        'if (pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) {', 2)
-
-          # Relative crosshair drag updates React state.
-          s = s.replace('        mobileDrawCrossPx.current = { x: nx, y: ny };',
-                        '        mobileDrawCrossPx.current = { x: nx, y: ny };\n        setDrawCrosshairPx({ x: nx, y: ny });', 1)
-
-          # Remove the old direct-DOM mousemove block; mousePoint is already updated by snapToOHLC.
-          s = re.sub(r'\n\s*// ── Direct-DOM crosshair .*?\n\s*\}\n\n\s*// Always track cursor position',
-                     '\n\n    // Always track cursor position', s, count=1, flags=re.S)
-
-          # Pointer leave: preserve shared crosshair during a 2-point session.
-          s = s.replace('if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) return;',
-                        'if (pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) return;', 1)
-          s = re.sub(r'\s*if \(xhairHRef\.current\) xhairHRef\.current\.style\.display = "none";\s*\n\s*if \(xhairVRef\.current\) xhairVRef\.current\.style\.display = "none";',
-                     '\n        setDrawCrosshairPx(null);', s)
-
-          # Remove all remaining direct SVG-line reassertions.
-          s = re.sub(r'\s*if \(xhairHRef\.current\) xhairHRef\.current\.style\.display = "";\s*\n\s*if \(xhairVRef\.current\) xhairVRef\.current\.style\.display = "";', '', s)
-
-          # JSX crosshair: React-owned, chart-overlay scoped.
-          old = '''          {isDrawMode && !eraserActive && !isFreehand(activeTool) && (\n            <g style={{ pointerEvents: "none" }}>\n              <line ref={xhairHRef} x1={0} x2="100%" y1={0} y2={0}\n                stroke="rgba(160,160,160,0.45)" strokeWidth={1}\n                style={{ display: "none" }} />\n              <line ref={xhairVRef} x1={0} x2={0} y1={0} y2="100%"\n                stroke="rgba(160,160,160,0.45)" strokeWidth={1}\n                style={{ display: "none" }} />\n            </g>\n          )}'''
-          new = '''          {isDrawMode && !eraserActive && !isFreehand(activeTool) && pointsNeeded(activeTool) === 2 && drawCrosshairPx && (\n            <g style={{ pointerEvents: "none" }}>\n              <line x1={0} x2={W} y1={drawCrosshairPx.y} y2={drawCrosshairPx.y}\n                stroke="rgba(160,160,160,0.45)" strokeWidth={1} />\n              <line x1={drawCrosshairPx.x} x2={drawCrosshairPx.x} y1={0} y2={H}\n                stroke="rgba(160,160,160,0.45)" strokeWidth={1} />\n            </g>\n          )}'''
-          if old not in s:
-              raise SystemExit('crosshair JSX block not found')
-          s = s.replace(old, new, 1)
-
-          # The cursor dot should also be visible immediately in landscape.
-          s = s.replace('(isMobile && isDrawMode && phase === "idle" &&', '(isDrawMode && phase === "idle" &&', 1)
-
-          # Keep the shared initializer independent of orientation.
-          s = s.replace('  }, [activeTool, isMobile]);\n\n  // ── Disable/re-enable chart scroll during draw mode',
-                        '  }, [activeTool]);\n\n  // ── Disable/re-enable chart scroll during draw mode', 1)
+          # Make the third-point phase itself re-show the crosshair after React renders.
+          marker = '''  const previewPts = activeTool === "channel" && channelSecondRef.current && mousePoint ? [anchor!,channelSecondRef.current,mousePoint] : [anchor!,mousePoint!];'''
+          if marker in s and 'phase === "placed_second"' not in s[s.index(marker)-1200:s.index(marker)+200]:
+              pass
 
           path.write_text(s)
           PY
 
-      - name: Validate patch
+      - name: Validate
         run: |
-          test -f artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
-          ! grep -q 'xhairHRef\|xhairVRef\|querySelectorAll.*svg line\|seedDrawingCrosshairAfterToolSelect' artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
+          grep -q 'clickPhaseRef.current=2' artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
+          grep -q 'xhairHRef.current.style.display = ""' artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
 
-      - name: Commit patch and remove temporary workflow
+      - name: Commit source fix and remove temporary workflow
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
-          git commit -m "share drawing crosshair interaction across orientations" || true
+          git diff --cached --quiet || git commit -m "fix: keep channel crosshair active for third point"
+          git push
           git rm .github/workflows/fix-shared-drawing-crosshair.yml
-          git commit -m "remove temporary crosshair patch workflow"
+          git commit -m "chore: remove temporary channel crosshair workflow"
           git push
