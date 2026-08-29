@@ -1,0 +1,54 @@
+name: Fix channel preview
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch channel preview
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path("artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx")
+          s = p.read_text()
+          old = '''    case "channel": {
+      if (px.length < 2) return null;
+      const dx=px[1].x-px[0].x,dy=px[1].y-px[0].y,len=Math.hypot(dx,dy)||1;'''
+          new = '''    case "channel": {
+      if (px.length < 2) return null;
+      // TradingView-style channel interaction: after Point 1 and Point 2,
+      // show only the base trendline. Do not invent a channel width until
+      // Point 3 has actually been placed; the third point controls the offset.
+      if (px.length === 2) {
+        const d = extendBothEnds(px[0], px[1], W, H);
+        return (
+          <g opacity={op} {...eraseClick}>
+            <Glow d={d} />
+            <path d={d} stroke="transparent" strokeWidth={HIT} fill="none" {...hitProps} />
+            <path d={d} stroke={col} strokeWidth={sw} strokeDasharray={dash} fill="none" />
+          </g>
+        );
+      }
+      const dx=px[1].x-px[0].x,dy=px[1].y-px[0].y,len=Math.hypot(dx,dy)||1;'''
+          if old not in s:
+              raise SystemExit("channel renderer anchor not found")
+          p.write_text(s.replace(old, new, 1))
+      - name: Verify
+        run: |
+          grep -n 'TradingView-style channel interaction' artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
+      - name: Commit source fix and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
+          git rm .github/workflows/fix-channel-preview.yml
+          git commit -m "Fix parallel channel preview before third point"
+          git push origin HEAD:main
