@@ -83,6 +83,10 @@ export function isFreehand(tool: ToolType): boolean {
 export function pointsNeeded(tool: ToolType): number {
   if (tool === "hline" || tool === "hray" || tool === "vline" || tool === "eraser" || tool === "text" || tool === "note") return 1;
   if (isFreehand(tool)) return Infinity;
-  if (tool === "channel") return 3;
+  // Parallel Channel is still a 3-point drawing, but its mobile interaction
+  // is handled by the dedicated channel branch in DrawingOverlay. Returning
+  // 2 here lets the mobile crosshair activate/persist exactly like Trendline;
+  // the channel branch continues to collect Point 3 after Point 2.
+  if (tool === "channel") return 2;
   return 2;
 }
