@@ -11,18 +11,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Patch channel implementation
-        run: python3 scripts/apply_parallel_channel_patch.py
+        run: python3 scripts/fix_parallel_channel_v4.py
       - name: Commit patched implementation
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add artifacts/trading-journal/src/types/drawing.ts artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx artifacts/trading-journal/src/components/charts/drawingCanvasRenderer.ts
+          git add artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
           git diff --cached --quiet && exit 0
-          git commit -m 'feat: make parallel channel TradingView-style'
+          git commit -m 'fix: make parallel channel TradingView-compatible'
           git push
       - name: Remove patch tooling
         run: |
-          rm -f .github/workflows/apply-parallel-channel.patch.yml scripts/apply_parallel_channel_patch.py
+          rm -f .github/workflows/apply-parallel-channel.patch.yml scripts/fix_parallel_channel_v4.py .github/workflows/apply-channel-v4.yml
           git add -A
           git diff --cached --quiet && exit 0
           git commit -m 'chore: remove temporary channel patch tooling'
