@@ -1,8 +1,8 @@
 name: Apply channel third-point crosshair fix
 
 on:
-  push:
-    branches: [main]
+  pull_request:
+    types: [opened, synchronize]
 
 permissions:
   contents: write
@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - name: Patch Point 2 to Point 3 interaction
         env:
           TARGET: artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
@@ -21,48 +23,37 @@ jobs:
           import os
           path = Path(os.environ['TARGET'])
           s = path.read_text()
-
           old = '''        else if (clickPhaseRef.current===1) { channelSecondRef.current=pt;setMousePoint(pt);setPhase("placed_second");clickPhaseRef.current=2; }'''
           new = '''        else if (clickPhaseRef.current===1) {
           channelSecondRef.current=pt;
           setMousePoint(pt);
           setPhase("placed_second");
           clickPhaseRef.current=2;
-          // Point 2 is only the baseline. Keep the full-span crosshair visible
-          // so the next vertical drag can position Point 3.
+          // Keep crosshair visible after Point 2 so Point 3 can be positioned by drag.
           if (xhairHRef.current) xhairHRef.current.style.display = "";
           if (xhairVRef.current) xhairVRef.current.style.display = "";
         }'''
           if old in s:
               s = s.replace(old, new, 1)
-          elif 'channelSecondRef.current=pt;setMousePoint(pt);setPhase("placed_second");clickPhaseRef.current=2;' not in s:
+          elif 'xhairHRef.current.style.display = ""' not in s:
               raise SystemExit('Point 2 channel branch not found')
-
           old_guard = 'if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) return;'
           new_guard = 'if (isMobile && activeTool === "channel" && !isFreehand(activeTool)) return;'
           if old_guard in s:
               s = s.replace(old_guard, new_guard, 1)
-
-          # Make the third-point phase itself re-show the crosshair after React renders.
-          marker = '''  const previewPts = activeTool === "channel" && channelSecondRef.current && mousePoint ? [anchor!,channelSecondRef.current,mousePoint] : [anchor!,mousePoint!];'''
-          if marker in s and 'phase === "placed_second"' not in s[s.index(marker)-1200:s.index(marker)+200]:
-              pass
-
           path.write_text(s)
           PY
-
-      - name: Validate
+      - name: Validate source
         run: |
           grep -q 'clickPhaseRef.current=2' artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
           grep -q 'xhairHRef.current.style.display = ""' artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
-
       - name: Commit source fix and remove temporary workflow
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
           git diff --cached --quiet || git commit -m "fix: keep channel crosshair active for third point"
-          git push
+          git push origin HEAD:${{ github.head_ref }}
           git rm .github/workflows/fix-shared-drawing-crosshair.yml
-          git commit -m "chore: remove temporary channel crosshair workflow"
-          git push
+          git commit -m "chore: remove temporary channel fix workflow"
+          git push origin HEAD:${{ github.head_ref }}
