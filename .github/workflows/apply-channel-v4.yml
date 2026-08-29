@@ -1,0 +1,29 @@
+name: Apply Channel V4
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, '[apply-channel-v4]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch
+        run: python3 scripts/fix_parallel_channel_v4.py
+      - name: Commit patched files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add artifacts/trading-journal/src/components/charts/DrawingOverlay.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: make parallel channel TradingView-compatible'
+          git push
+      - name: Remove temporary patch tooling
+        run: |
+          rm -f .github/workflows/apply-channel-v4.yml scripts/fix_parallel_channel_v4.py
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m 'chore: remove temporary channel patch tooling'
+          git push
