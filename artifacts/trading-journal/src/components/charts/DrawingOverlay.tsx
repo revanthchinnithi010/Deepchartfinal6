@@ -760,19 +760,36 @@ const DrawingShape = memo(function DrawingShape({
       const dx=px[1].x-px[0].x,dy=px[1].y-px[0].y,len=Math.hypot(dx,dy)||1;
       const channelWidth=px.length>=3?((px[2].x-px[0].x)*(-dy)+(px[2].y-px[0].y)*dx)/len:Math.min(H*0.12,60);
       const [c0,c1]=parallelOffset(px[0],px[1],channelWidth);
-      const d1 = extendBothEnds(px[0], px[1], W, H);
-      const d2 = extendBothEnds(c0, c1, W, H);
+      const [a1,b1]=extendBothEnds(px[0],px[1],W,H).split(" ") as any;
+      // Use the same infinite line geometry for both rails. The offset rail is
+      // parallel by construction; the shaded zone is the exact quadrilateral
+      // between the two extended rails.
+      const baseSlope = Math.abs(px[1].x-px[0].x) > 0.5 ? (px[1].y-px[0].y)/(px[1].x-px[0].x) : null;
+      const baseA: Px = Math.abs(px[1].x-px[0].x) <= 0.5
+        ? {x:px[0].x,y:-20}
+        : {x:-20,y:px[0].y+(baseSlope!)*(-20-px[0].x)};
+      const baseB: Px = Math.abs(px[1].x-px[0].x) <= 0.5
+        ? {x:px[0].x,y:H+20}
+        : {x:W+20,y:px[0].y+(baseSlope!)*(W+20-px[0].x)};
+      const offA: Px = Math.abs(c1.x-c0.x) <= 0.5
+        ? {x:c0.x,y:-20}
+        : {x:-20,y:c0.y+(baseSlope!)*(-20-c0.x)};
+      const offB: Px = Math.abs(c1.x-c0.x) <= 0.5
+        ? {x:c0.x,y:H+20}
+        : {x:W+20,y:c0.y+(baseSlope!)*(W+20-c0.x)};
+      const d1=`M ${baseA.x.toFixed(1)} ${baseA.y.toFixed(1)} L ${baseB.x.toFixed(1)} ${baseB.y.toFixed(1)}`;
+      const d2=`M ${offA.x.toFixed(1)} ${offA.y.toFixed(1)} L ${offB.x.toFixed(1)} ${offB.y.toFixed(1)}`;
       return (
         <g opacity={op} {...eraseClick}>
           <Glow d={d1} />
           <path d={d1} stroke="transparent" strokeWidth={HIT} fill="none" {...hitProps} />
+          <path d={d2} stroke="transparent" strokeWidth={HIT} fill="none" {...hitProps} />
           <path d={d1} stroke={col} strokeWidth={sw} strokeDasharray={dash} fill="none" />
           <path d={d2} stroke={col} strokeWidth={sw} strokeDasharray={dash} fill="none" opacity={0.6} />
-          <polygon
-            points={`${Math.max(-20, px[0].x - 50)},${px[0].y + (px[0].y - px[1].y) * -10} ${Math.min(W + 20, px[1].x + 50)},${px[1].y} ${Math.min(W + 20, c1.x + 50)},${c1.y} ${Math.max(-20, c0.x - 50)},${c0.y}`}
-            fill={col} fillOpacity={style.fillOpacity * 0.5} />
+          <polygon points={`${baseA.x},${baseA.y} ${baseB.x},${baseB.y} ${offB.x},${offB.y} ${offA.x},${offA.y}`} fill={col} fillOpacity={style.fillOpacity * 0.5} />
           <circle cx={px[0].x} cy={px[0].y} r={3.5} fill={col} opacity={isSelected ? 0 : 0.85} />
           <circle cx={px[1].x} cy={px[1].y} r={3.5} fill={col} opacity={isSelected ? 0 : 0.85} />
+          {px.length>=3 && <circle cx={px[2].x} cy={px[2].y} r={3.5} fill={col} opacity={isSelected ? 0 : 0.85} />}
           <Anchor i={0} p={px[0]} />
           <Anchor i={1} p={px[1]} />
           {px.length>=3 && <Anchor i={2} p={px[2]} />}
@@ -3765,14 +3782,8 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     }
 
     // ── 2-point / 3-point tools: TradingView click-click interaction ───────
-    if (activeTool === "channel") {
-      const p = snapToOHLC(e.clientX,e.clientY,e.shiftKey);
-      if (!p) return;
-      if (clickPhaseRef.current===0) { setAnchor(p);setMousePoint(p);setPhase("placed_first");setIsDrawing(true);clickPhaseRef.current=1; }
-      else if (clickPhaseRef.current===1) { channelSecondRef.current=p;setMousePoint(p);setPhase("placed_second");clickPhaseRef.current=2; }
-      else setMousePoint(p);
-      return;
-    }
+    // Mobile uses the crosshair/tap path below. Keeping channel inside the
+    // desktop branch here would bypass the mobile crosshair for all 3 taps.
 
     // ── Mobile: crosshair-drag model — save anchor, do NOT place point yet ─
     // Point placement happens in onPointerUp only when the lift is a tap (<10px).
@@ -3920,7 +3931,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     // ── MOBILE: tap-to-place at current crosshair position ────────────────
     // Drag (≥10px movement) = reposition crosshair only, no point placed.
     // Tap  (<10px movement) = place point at CROSSHAIR coords, not finger coords.
-    if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) {
+    if (isMobile && pointsNeeded(activeTool) >= 2 && pointsNeeded(activeTool) <= 3 && !isFreehand(activeTool)) {
       const start     = mobilePointerStart.current;
       mobileDrawDragAnchor.current = null;
       mobilePointerStart.current   = null;
@@ -3939,7 +3950,12 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       if (activeTool === "channel") {
         if (clickPhaseRef.current===0) { setAnchor(pt);setMousePoint(pt);setPhase("placed_first");setIsDrawing(true);clickPhaseRef.current=1; }
         else if (clickPhaseRef.current===1) { channelSecondRef.current=pt;setMousePoint(pt);setPhase("placed_second");clickPhaseRef.current=2; }
-        else if (channelSecondRef.current) { await saveDrawing([anchor!,channelSecondRef.current,pt]);channelSecondRef.current=null;setAnchor(null);setMousePoint(null);setPhase("idle");setIsDrawing(false);clickPhaseRef.current=0;if(!useDrawingStore.getState().stayInDraw)setActiveTool("cursor"); }
+        else if (channelSecondRef.current) {
+          await saveDrawing([anchor!,channelSecondRef.current,pt]);
+          channelSecondRef.current=null;setAnchor(null);setMousePoint(null);setPhase("idle");setIsDrawing(false);clickPhaseRef.current=0;
+          mobileDrawDragAnchor.current=null; mobilePointerStart.current=null;
+          if(!useDrawingStore.getState().stayInDraw)setActiveTool("cursor");
+        }
       } else if (clickPhaseRef.current === 0) {
         // First tap → place Point A
         setAnchor(pt);
@@ -3989,11 +4005,16 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       return;
     }
 
+    // Channel is committed in the desktop 3-click path below and in the mobile
+    // crosshair path above. Continue here only for the ordinary 2-point tools.
     if (activeTool === "channel") {
-      if (clickPhaseRef.current!==2 || !anchor || !channelSecondRef.current) return;
-      const p3=snapToOHLC(e.clientX,e.clientY,e.shiftKey); if(!p3) return;
-      await saveDrawing([anchor,channelSecondRef.current,p3]);
-      channelSecondRef.current=null;setAnchor(null);setMousePoint(null);setPhase("idle");setIsDrawing(false);clickPhaseRef.current=0;if(!useDrawingStore.getState().stayInDraw)setActiveTool("cursor");
+      if (clickPhaseRef.current !== 2 || !anchor || !channelSecondRef.current) return;
+      const p3 = snapToOHLC(e.clientX, e.clientY, e.shiftKey);
+      if (!p3) return;
+      await saveDrawing([anchor, channelSecondRef.current, p3]);
+      channelSecondRef.current = null; setAnchor(null); setMousePoint(null);
+      setPhase("idle"); setIsDrawing(false); clickPhaseRef.current = 0;
+      if (!useDrawingStore.getState().stayInDraw) setActiveTool("cursor");
       return;
     }
     if (clickPhaseRef.current !== 1) return;
