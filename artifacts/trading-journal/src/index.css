@@ -118,6 +118,20 @@ svg path[stroke="transparent"][style*="cursor: move"] {
   }
 }
 
+/* ── Mobile/PWA chart gesture safety ──────────────────────────────────────
+   CustomChart renders a transparent price-scale touch layer over the right
+   edge. On installed Android/PWA layouts the DOM-measured LWC price-scale
+   width can temporarily report the whole chart width during rotation/reflow.
+   That makes the transparent layer capture every chart drag. Keep the layer
+   bounded to the actual price-axis area so the chart canvas remains draggable.
+   The layer itself is intentionally still interactive for price-scale zoom. */
+@media (pointer: coarse) {
+  div[style*="cursor: ns-resize"][style*="touch-action: none"] {
+    width: 110px !important;
+    max-width: 110px !important;
+  }
+}
+
 /* ── Add Trade: premium mobile footer action ─────────────────────────────── */
 button[type="submit"][form="tradeForm"] {
   min-width: 144px !important;
