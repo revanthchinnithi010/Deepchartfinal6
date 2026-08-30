@@ -108,6 +108,18 @@ svg path[stroke="transparent"][style*="cursor: move"] {
   pointer-events: none !important;
 }
 
+/* ── Chart-pan passthrough for the full DrawingOverlay SVG ─────────────────
+   DrawingOverlay sits above the LWC canvas and its root SVG covers the entire
+   chart. In empty chart space that root SVG must not become the pointer target;
+   otherwise CustomChart's pan handler sees an SVG target and intentionally
+   leaves the gesture alone. Individual drawing handles/paths can still opt back
+   into pointer events on their own elements. This makes mobile/PWA chart drag
+   work like TradingView across the empty plotting area while preserving drawing
+   interactions on actual shapes. */
+svg[style*="will-change: transform"][style*="touch-action: none"][style*="position: relative"] {
+  pointer-events: none !important;
+}
+
 /* ── Mobile chart indicator legend placement ───────────────────────────────
    The symbol/timeframe header lives at the top-left of the chart. IndicatorTags
    used to start at the same 8px position and covered the symbol. Move only the
