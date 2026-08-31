@@ -7,6 +7,7 @@
     "predev": "bash ../../scripts/ensure-install.sh",
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
+    "prestart": "pnpm run build",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
