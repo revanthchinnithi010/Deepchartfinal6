@@ -15,48 +15,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      - name: Patch line settings
+
+      - name: Verify line settings patch
         shell: bash
         run: |
           node <<'NODE'
           const fs = require('fs');
-          const path = 'artifacts/trading-journal/src/components/charts/MobileChartLayout.tsx';
-          let s = fs.readFileSync(path, 'utf8');
-          const replaceOnce = (a,b,label) => {
-            if (!s.includes(a)) throw new Error(`Missing ${label}`);
-            s = s.replace(a,b);
-          };
-          replaceOnce('  upWickColor: (v: string) => void; downWickColor: (v: string) => void;\n  priceLabelBull:', '  upWickColor: (v: string) => void; downWickColor: (v: string) => void;\n  lineColor: (v: string) => void; lineOpacity: (v: number) => void; lineWidth: (v: number) => void;\n  priceLabelBull:', 'CSSHandlers line fields');
-          replaceOnce('    downWickColor:      (v: string)  => p({ downWickColor: v }),\n    priceLabelBull:', '    downWickColor:      (v: string)  => p({ downWickColor: v }),\n    lineColor:           (v: string)  => p({ lineColor: v }),\n    lineOpacity:         (v: number)  => p({ lineOpacity: v }),\n    lineWidth:           (v: number)  => p({ lineWidth: v }),\n    priceLabelBull:', 'line handlers');
-          const candleMarker = 'const CandleSection = memo(function CandleSection({ settings, h }: CSSSectionProps) {';
-          const lineSection = `const LineSection = memo(function LineSection({ settings, h }: CSSSectionProps) {\n  return (\n    <Section title="Line">\n      <Row label="Color"><ColorSwatch value={settings.lineColor} onChange={h.lineColor} label="Line Color" /></Row>\n      <Row label="Opacity"><StyledSelect value={String(Math.round(settings.lineOpacity * 100))} onChange={v => h.lineOpacity(Number(v) / 100)} options={[\n        { value: "25", label: "25%" }, { value: "50", label: "50%" }, { value: "75", label: "75%" }, { value: "100", label: "100%" },\n      ]} /></Row>\n      <Row label="Line Width" last><ThicknessButtons value={settings.lineWidth} onChange={h.lineWidth} /></Row>\n    </Section>\n  );\n});\n\n`;
-          replaceOnce(candleMarker, lineSection + candleMarker, 'LineSection');
-          replaceOnce('const CandlesTabContent = memo(function CandlesTabContent({ settings, h }: CSSSectionProps) {', 'const LineTabContent = memo(function LineTabContent({ settings, h }: CSSSectionProps) {\n  return <div style={{ padding:"12px 14px 4px" }}><LineSection settings={settings} h={h} /></div>;\n});\n\nconst CandlesTabContent = memo(function CandlesTabContent({ settings, h }: CSSSectionProps) {', 'LineTabContent');
-          replaceOnce('settings, onChange, onSaveAsDefault, onBack, onClose,\n}: {\n  settings: ChartSettings;', 'settings, onChange, onSaveAsDefault, chartType, onBack, onClose,\n}: {\n  settings: ChartSettings;\n  chartType: ChartType;', 'ChartSettingsSheet chartType prop');
-          replaceOnce('  const [tab, setTab] = useState<"Candles"|"Appearance"|"Scale">("Candles");', '  const [tab, setTab] = useState<"Candles"|"Line"|"Appearance"|"Scale">(() => (chartType === "line" || chartType === "line_with_markers") ? "Line" : "Candles");', 'ChartSettingsSheet tab state');
-          replaceOnce('(["Candles","Appearance","Scale"] as const).map(t => {', '(["Candles","Line","Appearance","Scale"] as const).map(t => {', 'ChartSettingsSheet tabs');
-          replaceOnce('{tab === "Candles"    && <CandlesTabContent    settings={settings} h={h} />}', '{tab === "Candles"    && <CandlesTabContent    settings={settings} h={h} />}\n        {tab === "Line"       && <LineTabContent       settings={settings} h={h} />}', 'Line tab render');
-          replaceOnce('{showSettings    && <ChartSettingsSheet settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefaultWrapped} onBack={handleBackFromSettings} onClose={handleCloseFromSettings} />}', '{showSettings    && <ChartSettingsSheet settings={chartSettings} chartType={chartType} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefaultWrapped} onBack={handleBackFromSettings} onClose={handleCloseFromSettings} />}', 'ChartSettingsSheet caller');
-          fs.writeFileSync(path, s);
+          const mobilePath = 'artifacts/trading-journal/src/components/charts/MobileChartLayout.tsx';
+          const chartPath = 'artifacts/trading-journal/src/components/charts/CustomChart.tsx';
+          const mobile = fs.readFileSync(mobilePath, 'utf8');
+          const chart = fs.readFileSync(chartPath, 'utf8');
 
-          const cpath = 'artifacts/trading-journal/src/components/charts/CustomChart.tsx';
-          let c = fs.readFileSync(cpath, 'utf8');
-          const cr = (a,b,label) => { if (!c.includes(a)) throw new Error(`Missing ${label}`); c = c.replace(a,b); };
-          cr('function makeSeries(chart: IChartApi, ct: ChartType): ISeriesApi<SeriesType> {', 'function makeSeries(chart: IChartApi, ct: ChartType, settings?: ChartSettings): ISeriesApi<SeriesType> {', 'makeSeries signature');
-          cr('case "line":\n      return chart.addSeries(LineSeries, { color: UP_COLOR, lineWidth: 2, crosshairMarkerVisible: true, crosshairMarkerRadius: 4, lastValueVisible: false });', 'case "line": {\n      const color = settings?.lineColor ?? UP_COLOR;\n      const opacity = settings?.lineOpacity ?? 1;\n      const width = settings?.lineWidth ?? 2;\n      return chart.addSeries(LineSeries, { color: hexToRgba(color, opacity), lineWidth: width, crosshairMarkerVisible: true, crosshairMarkerRadius: 4, lastValueVisible: false });\n    }', 'line series settings');
-          cr('case "line_with_markers":\n      return chart.addSeries(LineSeries, { color: UP_COLOR, lineWidth: 2, crosshairMarkerVisible: true, crosshairMarkerRadius: 4, pointMarkersVisible: true, pointMarkersRadius: 3, lastValueVisible: false });', 'case "line_with_markers": {\n      const color = settings?.lineColor ?? UP_COLOR;\n      const opacity = settings?.lineOpacity ?? 1;\n      const width = settings?.lineWidth ?? 2;\n      return chart.addSeries(LineSeries, { color: hexToRgba(color, opacity), lineWidth: width, crosshairMarkerVisible: true, crosshairMarkerRadius: 4, pointMarkersVisible: true, pointMarkersRadius: 3, lastValueVisible: false });\n    }', 'line marker series settings');
-          c = c.replace(/makeSeries\(chart, ctRef\.current\)/g, 'makeSeries(chart, ctRef.current, settings)');
-          c = c.replace('makeSeries(chart, chartType)', 'makeSeries(chart, chartType, settings)');
-          const candleBranch = '    if (main && ctRef.current === "candles") {';
-          const lineBranch = '    if (main && (ctRef.current === "line" || ctRef.current === "line_with_markers")) {\n      try {\n        (main as ISeriesApi<"Line">).applyOptions({\n          color: hexToRgba(settings.lineColor, settings.lineOpacity),\n          lineWidth: settings.lineWidth,\n          pointMarkersVisible: ctRef.current === "line_with_markers",\n        });\n      } catch { /* chart type may not be line */ }\n    } else if (main && ctRef.current === "candles") {';
-          cr(candleBranch, lineBranch, 'line settings apply branch');
-          fs.writeFileSync(cpath, c);
-          console.log('Line chart settings patch applied');
+          const mobileOk = mobile.includes('const LineSection = memo(function LineSection')
+            && mobile.includes('lineColor: (v: string) => void;')
+            && mobile.includes('lineOpacity: (v: number) => void;')
+            && mobile.includes('lineWidth: (v: number) => void;');
+
+          const chartOk = chart.includes('function makeSeries(chart: IChartApi, ct: ChartType, settings?: ChartSettings)')
+            && chart.includes('color: hexToRgba(color, opacity)')
+            && chart.includes('pointMarkersVisible: ctRef.current === "line_with_markers"');
+
+          if (!mobileOk || !chartOk) {
+            throw new Error(`Line settings patch incomplete: MobileChartLayout=${mobileOk}, CustomChart=${chartOk}`);
+          }
+
+          console.log('Line chart settings patch is already applied and verified.');
           NODE
-      - name: Commit patched files
+
+      - name: No-op commit guard
+        shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/trading-journal/src/components/charts/MobileChartLayout.tsx artifacts/trading-journal/src/components/charts/CustomChart.tsx
-          git diff --cached --quiet || git commit -m "Apply line chart settings controls [line-settings-applied]"
-          git push
+          git status --short
+          echo "Workflow completed successfully; source files are already patched."
