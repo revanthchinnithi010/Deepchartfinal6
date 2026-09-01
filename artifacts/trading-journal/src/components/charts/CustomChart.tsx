@@ -1442,7 +1442,7 @@ const CustomChart = memo(function CustomChart({
         // stopPropagation) — LWC and our engine both pan concurrently causing jitter.
         // time: false → our gesture engine owns all horizontal pan exclusively.
         // price: true kept → native mouse drag on price scale still zooms it.
-        axisPressedMouseMove: { time: false, price: true },
+        axisPressedMouseMove: { time: false, price: false },
         axisDoubleClickReset: { time: true, price: true },
       },
     });
@@ -2820,7 +2820,7 @@ const CustomChart = memo(function CustomChart({
       try {
         ch.applyOptions({
           handleScroll:  { mouseWheel: false, pressedMouseMove: false, horzTouchDrag: false, vertTouchDrag: false },
-          handleScale:   { mouseWheel: true,  pinch: false, axisPressedMouseMove: { time: false, price: true }, axisDoubleClickReset: { time: true, price: true } },
+          handleScale:   { mouseWheel: true,  pinch: false, axisPressedMouseMove: { time: false, price: false }, axisDoubleClickReset: { time: true, price: true } },
           kineticScroll: { mouse: false, touch: false },
         });
       } catch { /* ok — chart may have been disposed between the two calls */ }
