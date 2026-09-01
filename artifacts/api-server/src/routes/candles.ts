@@ -112,7 +112,28 @@ export function createCandlesRouter(aggregator: CandleAggregator, _marketData: M
     }
 
     if(CTRADER_SYMBOLS.has(symbol)){
-      if(beforeSecOpt){const engineStatus=ctraderTickEngine.getStatus();if(engineStatus.status!=="streaming"){res.json([]);return;}const symRow=await lookupSymbolId(symbol).catch(()=>null);if(!symRow){res.json([]);return;}let bars:OHLCBar[]=[];try{bars=await ctraderTickEngine.fetchTrendbarsOnSession(symRow.symbolId,interval,500,15000,beforeSecOpt) as OHLCBar[];}catch(firstErr){try{bars=await ctraderTickEngine.fetchTrendbarsOnSession(symRow.symbolId,interval,500,15000,beforeSecOpt) as OHLCBar[];}catch(retryErr){logger.error({symbol,interval,err:String(retryErr)},"candles: cTrader history page failed");res.json([]);return;}}res.json(bars.filter(b=>b.time<beforeSecOpt));return;}
+      if(beforeSecOpt){
+        const engineStatus=ctraderTickEngine.getStatus();
+        if(engineStatus.status!=="streaming"){res.json([]);return;}
+        const symRow=await lookupSymbolId(symbol).catch(()=>null);
+        if(!symRow){res.json([]);return;}
+        let bars:OHLCBar[]=[];
+        try{
+          // Frontend cursor is unix seconds; ProtoOAGetTrendbarsReq expects milliseconds.
+          // Passing seconds here made historical pages land near the Unix epoch, so cTrader
+          // returned no older bars while Delta/Bybit pagination continued to work.
+          bars=await ctraderTickEngine.fetchTrendbarsOnSession(symRow.symbolId,interval,500,15000,Math.floor(beforeSecOpt*1000)-1) as OHLCBar[];
+        }catch(firstErr){
+          try{
+            bars=await ctraderTickEngine.fetchTrendbarsOnSession(symRow.symbolId,interval,500,15000,Math.floor(beforeSecOpt*1000)-1) as OHLCBar[];
+          }catch(retryErr){
+            logger.error({symbol,interval,beforeSecOpt,err:String(retryErr)},"candles: cTrader history page failed");
+            res.json([]);return;
+          }
+        }
+        res.json(bars.filter(b=>b.time<beforeSecOpt));
+        return;
+      }
       const cacheKey=`${symbol}:${interval}`; const aggBars=aggregator.getBars(symbol,iv); const cached=trendbarsCache.get(cacheKey);
       if(cached&&Date.now()-cached.fetchedAt<TRENDBARS_CACHE_TTL){res.json(mergeBars(cached.bars,aggBars));return;}
       const engineStatus=ctraderTickEngine.getStatus();if(engineStatus.status!=="streaming"){res.json(aggBars.slice(-501));return;}
