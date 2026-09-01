@@ -6,8 +6,6 @@ import { ColorPickerGlass } from "@/components/ColorPickerGlass";
 import { useChartContext } from "@/contexts/ChartContext";
 import { ChartBarsContext } from "@/contexts/ChartBarsContext";
 import { useDrawingStore, getDeletedDrawingIds, saveDrawingStyle } from "@/store/drawingStore";
-import { useAlertStore } from "@/store/alertStore";
-import type { TrendlineAlert } from "@/data/alertsData";
 import { useChartStore } from "@/store/chartStore";
 import { toArray } from "@/lib/safeArray";
 import { type Drawing, type DrawingPoint, type DrawingStyle, type ToolType, pointsNeeded, isFreehand, DEFAULT_STYLE } from "@/types/drawing";
@@ -40,61 +38,6 @@ function getIntervalSec(tf: string): number {
   if (tf === "1M" || tf === "M")  return 2592000;
   const m = parseInt(tf, 10);
   return isNaN(m) ? 3600 : m * 60;
-}
-
-
-function normalizeTimeframe(tf: string): string {
-  const raw = String(tf ?? "").trim().toUpperCase().replace(/\s+/g, "");
-  if (!raw) return "";
-  if (raw === "D" || raw === "1D") return "1D";
-  if (raw === "W" || raw === "1W") return "1W";
-  if (raw === "M" || raw === "1M") return "1M";
-  const n = raw.endsWith("M") ? raw.slice(0, -1) : raw.endsWith("H") ? String(Number(raw.slice(0, -1)) * 60) : raw;
-  const mins = Number(n);
-  if (Number.isFinite(mins)) return `${mins}M`;
-  return raw;
-}
-
-function calculateLatestAtr(bars: OhlcBar[], period: number): number | null {
-  if (!Array.isArray(bars) || bars.length < period + 1) return null;
-  const p = Math.max(1, Math.floor(period));
-  const start = Math.max(1, bars.length - p * 3);
-  let trs: number[] = [];
-  for (let i = start; i < bars.length; i++) {
-    const cur = bars[i];
-    const prev = bars[i - 1];
-    if (!cur || !prev) continue;
-    const tr = Math.max(
-      Number(cur.high) - Number(cur.low),
-      Math.abs(Number(cur.high) - Number(prev.close)),
-      Math.abs(Number(cur.low) - Number(prev.close)),
-    );
-    if (Number.isFinite(tr)) trs.push(Math.max(0, tr));
-  }
-  if (trs.length < p) return null;
-  let atr = trs.slice(0, p).reduce((a, b) => a + b, 0) / p;
-  for (let i = p; i < trs.length; i++) atr = ((atr * (p - 1)) + trs[i]) / p;
-  return Number.isFinite(atr) && atr > 0 ? atr : null;
-}
-
-function offsetLinePoints(
-  points: Px[],
-  prices: DrawingPoint[],
-  buffer: number,
-  candle: any,
-): [Px[], Px[]] | null {
-  if (points.length < 2 || prices.length < 2 || !candle) return null;
-  const upper: Px[] = [];
-  const lower: Px[] = [];
-  for (let i = 0; i < 2; i++) {
-    const price = Number(prices[i]?.price);
-    const yu = candle.priceToCoordinate(price + buffer);
-    const yl = candle.priceToCoordinate(price - buffer);
-    if (yu == null || yl == null || !Number.isFinite(Number(yu)) || !Number.isFinite(Number(yl))) return null;
-    upper.push({ x: points[i].x, y: Number(yu) });
-    lower.push({ x: points[i].x, y: Number(yl) });
-  }
-  return [upper, lower];
 }
 
 // ── Fibonacci levels ──────────────────────────────────────────────────────────
@@ -201,13 +144,13 @@ function hitTestDrawingAtPx(
         Math.abs(cy - y1) < T || Math.abs(cy - y2) < T
       );
     }
-    case "channel": {
+    case "channel":
       if (pts.length < 2) return false;
-      const dx=pts[1].x-pts[0].x, dy=pts[1].y-pts[0].y, len=Math.hypot(dx,dy)||1;
-      const off=pts.length>=3?((pts[2].x-pts[0].x)*(-dy)+(pts[2].y-pts[0].y)*dx)/len:0;
-      const [c0,c1]=parallelOffset(pts[0],pts[1],off);
-      return distToSeg({x:cx,y:cy},pts[0],pts[1])<T || (pts.length>=3 && distToSeg({x:cx,y:cy},c0,c1)<T) || (pts.length>=3 && Math.hypot(cx-pts[2].x,cy-pts[2].y)<T*1.2);
-    }
+      return (
+        distToSeg({ x: cx, y: cy }, pts[0], pts[1]) < T ||
+        (pts.length >= 4 ? distToSeg({ x: cx, y: cy }, pts[2], pts[3]) < T : false) ||
+        (pts.length >= 3 ? distToSeg({ x: cx, y: cy }, pts[1], pts[2]) < T : false)
+      );
     case "fib": {
       if (pts.length < 2) return false;
       for (const lv of [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.618]) {
@@ -217,24 +160,7 @@ function hitTestDrawingAtPx(
     }
     default:
       if (pts.length === 1) return Math.hypot(cx - pts[0].x, cy - pts[0].y) < T;
-      if (pts.length >= 2) {
-        // Ray visuals start at Point A and extend to the right edge. The old
-        // hit-test only checked the finite A→B segment, so taps on the
-        // extended portion could not select the ray.
-        if (d.toolType === "ray") {
-          const a = pts[0];
-          const b = pts[1];
-          if (Math.abs(b.x - a.x) < 0.5) {
-            // Match extendRight(): vertical rays extend upward from Point A.
-            return Math.abs(cx - a.x) < T && cy <= a.y + T;
-          }
-          if (cx < a.x - T) return false;
-          const slope = (b.y - a.y) / (b.x - a.x);
-          const expectedY = a.y + slope * (cx - a.x);
-          return Math.abs(cy - expectedY) < T;
-        }
-        return distToSeg({ x: cx, y: cy }, pts[0], pts[pts.length - 1]) < T;
-      }
+      if (pts.length >= 2) return distToSeg({ x: cx, y: cy }, pts[0], pts[pts.length - 1]) < T;
       return false;
   }
 }
@@ -244,87 +170,6 @@ function parallelOffset(a: Px, b: Px, dist: number): [Px, Px] {
   const len = Math.hypot(dx, dy) || 1;
   const nx = -dy / len * dist, ny = dx / len * dist;
   return [{ x: a.x + nx, y: a.y + ny }, { x: b.x + nx, y: b.y + ny }];
-}
-
-
-// ── ATR proximity visual band ──────────────────────────────────────────────────
-// Rendered independently from DrawingShape because unselected drawings are
-// painted by Canvas2D. This SVG layer is pointer-events:none and therefore never
-// interferes with chart panning/zooming.
-function AtrProximityBand({
-  drawing,
-  alert,
-  toPx,
-  W,
-  candle,
-  bars,
-}: {
-  drawing: Drawing;
-  alert: TrendlineAlert;
-  toPx: (pt: DrawingPoint) => Px | null;
-  W: number;
-  candle: any;
-  bars: OhlcBar[];
-}) {
-  if (!drawing.isVisible || alert.status !== "active" || alert.condition !== "atr_proximity") return null;
-  if (drawing.points.length < 2 || !candle) return null;
-
-  const period = Math.max(5, Math.min(50, Number(alert.atrPeriod ?? 14)));
-  const multiplier = Math.max(0.05, Math.min(1, Number(alert.atrMultiplier ?? 0.15)));
-  const atr = calculateLatestAtr(bars, period);
-  if (atr == null) return null;
-
-  const base = drawing.points.slice(0, 2);
-  const center = base.map(toPx).filter(Boolean) as Px[];
-  if (center.length < 2) return null;
-
-  const shifted = offsetLinePoints(center, base, atr * multiplier, candle);
-  if (!shifted) return null;
-  const [upper0, lower0] = shifted;
-  let upper = upper0;
-  let lower = lower0;
-
-  const extendLeft = drawing.style.extendLeft ?? false;
-  const extendRight = drawing.style.extendRight ?? drawing.toolType === "ray";
-
-  const extendPair = (a: Px, b: Px, side: "left" | "right") => {
-    if (Math.abs(b.x - a.x) < 0.1) return a;
-    const m = (b.y - a.y) / (b.x - a.x);
-    if (side === "left") return { x: -12, y: a.y + m * (-12 - a.x) };
-    return { x: W + 12, y: a.y + m * (W + 12 - a.x) };
-  };
-
-  if (extendLeft) {
-    upper = [extendPair(upper[0], upper[1], "left"), ...upper];
-    lower = [extendPair(lower[0], lower[1], "left"), ...lower];
-  }
-  if (extendRight) {
-    upper = [...upper, extendPair(upper[upper.length - 2], upper[upper.length - 1], "right")];
-    lower = [...lower, extendPair(lower[lower.length - 2], lower[lower.length - 1], "right")];
-  }
-
-  const poly = [
-    ...upper,
-    ...[...lower].reverse(),
-  ].map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-  const upperPath = upper.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-  const lowerPath = lower.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-  const mid = center[0].x <= center[1].x
-    ? { x: center[0].x + (center[1].x - center[0].x) * 0.55, y: center[0].y + (center[1].y - center[0].y) * 0.55 }
-    : { x: center[1].x + (center[0].x - center[1].x) * 0.45, y: center[1].y + (center[0].y - center[1].y) * 0.45 };
-  const label = `ATR ${period} × ${multiplier.toFixed(2)}`;
-
-  return (
-    <g style={{ pointerEvents: "none" }}>
-      <polygon points={poly} fill="rgba(245,158,11,0.10)" />
-      <path d={upperPath} fill="none" stroke="rgba(245,158,11,0.32)" strokeWidth={1} strokeDasharray="5 4" />
-      <path d={lowerPath} fill="none" stroke="rgba(245,158,11,0.32)" strokeWidth={1} strokeDasharray="5 4" />
-      <g transform={`translate(${mid.x.toFixed(1)},${mid.y.toFixed(1)})`}>
-        <rect x={-38} y={-18} width={76} height={18} rx={7} fill="rgba(12,12,12,0.88)" stroke="rgba(245,158,11,0.42)" />
-        <text x={0} y={-5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#fbbf24" fontFamily="Inter,system-ui,sans-serif">{label}</text>
-      </g>
-    </g>
-  );
 }
 
 // ── DrawingShape ──────────────────────────────────────────────────────────────
@@ -757,55 +602,23 @@ const DrawingShape = memo(function DrawingShape({
 
     case "channel": {
       if (px.length < 2) return null;
-      // TradingView-style channel interaction: after Point 1 and Point 2,
-      // show only the base trendline. Do not invent a channel width until
-      // Point 3 has actually been placed; the third point controls the offset.
-      if (px.length === 2) {
-        const d = extendBothEnds(px[0], px[1], W, H);
-        return (
-          <g opacity={op} {...eraseClick}>
-            <Glow d={d} />
-            <path d={d} stroke="transparent" strokeWidth={HIT} fill="none" {...hitProps} />
-            <path d={d} stroke={col} strokeWidth={sw} strokeDasharray={dash} fill="none" />
-          </g>
-        );
-      }
-      const dx=px[1].x-px[0].x,dy=px[1].y-px[0].y,len=Math.hypot(dx,dy)||1;
-      const channelWidth=px.length>=3?((px[2].x-px[0].x)*(-dy)+(px[2].y-px[0].y)*dx)/len:Math.min(H*0.12,60);
-      const [c0,c1]=parallelOffset(px[0],px[1],channelWidth);
-      const [a1,b1]=extendBothEnds(px[0],px[1],W,H).split(" ") as any;
-      // Use the same infinite line geometry for both rails. The offset rail is
-      // parallel by construction; the shaded zone is the exact quadrilateral
-      // between the two extended rails.
-      const baseSlope = Math.abs(px[1].x-px[0].x) > 0.5 ? (px[1].y-px[0].y)/(px[1].x-px[0].x) : null;
-      const baseA: Px = Math.abs(px[1].x-px[0].x) <= 0.5
-        ? {x:px[0].x,y:-20}
-        : {x:-20,y:px[0].y+(baseSlope!)*(-20-px[0].x)};
-      const baseB: Px = Math.abs(px[1].x-px[0].x) <= 0.5
-        ? {x:px[0].x,y:H+20}
-        : {x:W+20,y:px[0].y+(baseSlope!)*(W+20-px[0].x)};
-      const offA: Px = Math.abs(c1.x-c0.x) <= 0.5
-        ? {x:c0.x,y:-20}
-        : {x:-20,y:c0.y+(baseSlope!)*(-20-c0.x)};
-      const offB: Px = Math.abs(c1.x-c0.x) <= 0.5
-        ? {x:c0.x,y:H+20}
-        : {x:W+20,y:c0.y+(baseSlope!)*(W+20-c0.x)};
-      const d1=`M ${baseA.x.toFixed(1)} ${baseA.y.toFixed(1)} L ${baseB.x.toFixed(1)} ${baseB.y.toFixed(1)}`;
-      const d2=`M ${offA.x.toFixed(1)} ${offA.y.toFixed(1)} L ${offB.x.toFixed(1)} ${offB.y.toFixed(1)}`;
+      const channelWidth = Math.min(H * 0.12, 60);
+      const [c0, c1] = parallelOffset(px[0], px[1], channelWidth);
+      const d1 = extendBothEnds(px[0], px[1], W, H);
+      const d2 = extendBothEnds(c0, c1, W, H);
       return (
         <g opacity={op} {...eraseClick}>
           <Glow d={d1} />
           <path d={d1} stroke="transparent" strokeWidth={HIT} fill="none" {...hitProps} />
-          <path d={d2} stroke="transparent" strokeWidth={HIT} fill="none" {...hitProps} />
           <path d={d1} stroke={col} strokeWidth={sw} strokeDasharray={dash} fill="none" />
           <path d={d2} stroke={col} strokeWidth={sw} strokeDasharray={dash} fill="none" opacity={0.6} />
-          <polygon points={`${baseA.x},${baseA.y} ${baseB.x},${baseB.y} ${offB.x},${offB.y} ${offA.x},${offA.y}`} fill={col} fillOpacity={style.fillOpacity * 0.5} />
+          <polygon
+            points={`${Math.max(-20, px[0].x - 50)},${px[0].y + (px[0].y - px[1].y) * -10} ${Math.min(W + 20, px[1].x + 50)},${px[1].y} ${Math.min(W + 20, c1.x + 50)},${c1.y} ${Math.max(-20, c0.x - 50)},${c0.y}`}
+            fill={col} fillOpacity={style.fillOpacity * 0.5} />
           <circle cx={px[0].x} cy={px[0].y} r={3.5} fill={col} opacity={isSelected ? 0 : 0.85} />
           <circle cx={px[1].x} cy={px[1].y} r={3.5} fill={col} opacity={isSelected ? 0 : 0.85} />
-          {px.length>=3 && <circle cx={px[2].x} cy={px[2].y} r={3.5} fill={col} opacity={isSelected ? 0 : 0.85} />}
           <Anchor i={0} p={px[0]} />
           <Anchor i={1} p={px[1]} />
-          {px.length>=3 && <Anchor i={2} p={px[2]} />}
         </g>
       );
     }
@@ -2512,17 +2325,6 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   // replayBarCount is kept as an unused dep-guard in case callers use it elsewhere.
   void replayBarCount;
   const candleBars = barsRef.current as OhlcBar[];
-  const alerts = useAlertStore(state => state.alerts);
-  const atrTrendlineAlerts = useMemo(() => {
-    const active = alerts.filter((a): a is TrendlineAlert =>
-      a.type === "trendline" &&
-      a.status === "active" &&
-      a.condition === "atr_proximity" &&
-      a.symbol.toUpperCase() === symbol.toUpperCase() &&
-      normalizeTimeframe(a.timeframe) === normalizeTimeframe(timeframe)
-    );
-    return active;
-  }, [alerts, symbol, timeframe]);
 
   // Bar half-width derived from LWC's logical coordinate system.
   // Adjacent logical positions are always exactly one barSpacing apart in pixels,
@@ -2543,13 +2345,12 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   }, [chart]);
 
   // ── Drawing phase state ────────────────────────────────────────────────────
-  const [phase,      setPhase]      = useState<"idle" | "dragging" | "placed_first" | "placed_second">("idle");
+  const [phase,      setPhase]      = useState<"idle" | "dragging" | "placed_first">("idle");
   const [anchor,     setAnchor]     = useState<DrawingPoint | null>(null);
   const [mousePoint, setMousePoint] = useState<DrawingPoint | null>(null);
-  const channelSecondRef = useRef<DrawingPoint | null>(null);
   const isDragging                  = useRef(false);
   // Tracks click-click phase for 2-pt tools: 0=no first point, 1=first point placed
-  const clickPhaseRef               = useRef<0 | 1 | 2>(0);
+  const clickPhaseRef               = useRef<0 | 1>(0);
   // Direct-DOM crosshair refs — updated on every mousemove without React re-renders
   const xhairHRef                   = useRef<SVGLineElement | null>(null);
   const xhairVRef                   = useRef<SVGLineElement | null>(null);
@@ -2999,166 +2800,71 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   }, [chart, activeTool]);
 
   // ── Coordinate helpers ────────────────────────────────────────────────────
-  // IMPORTANT: Drawing points are persisted as absolute market coordinates
-  // ({ time, price }). A timestamp from a lower timeframe (for example 1m)
-  // will usually NOT exactly exist in a higher timeframe (for example 15m).
-  // lightweight-charts therefore returns null from timeToCoordinate() for that
-  // timestamp. Treating every null as "future" was the source of the bug where
-  // 1m trendlines jumped horizontally to the left edge on 15m.
-  //
-  // We solve this by projecting the timestamp against the CURRENT series data:
-  //   exact bar       -> exact bar coordinate
-  //   between bars    -> time-linear interpolation between surrounding bars
-  //   before history  -> extrapolate from first two bars
-  //   after history   -> extrapolate from last two bars
-  // This keeps the drawing anchored to the same absolute time/price on every
-  // timeframe without ever converting a stored point into a candle index.
   const toPx = useCallback((pt: DrawingPoint): Px | null => {
     if (!chart || !candle) return null;
-
+    const x = chart.timeScale().timeToCoordinate(pt.time as Time);
     const y = candle.priceToCoordinate(pt.price);
-    if (y === null || !Number.isFinite(Number(y))) return null;
 
-    const ts = chart.timeScale();
-    const targetTime = Number(pt.time);
-    if (!Number.isFinite(targetTime)) return null;
+    // Point is in the future area (beyond last candle): timeToCoordinate returns null.
+    // Use lightweight-charts logical-coordinate API which works everywhere, including
+    // the rightOffset future-space, regardless of zoom level / bar spacing.
+    if (x === null && y !== null) {
+      const toSec = (t: Time) =>
+        typeof t === "number" ? t : Math.floor(new Date(t as string).getTime() / 1000);
 
-    const toSec = (t: Time): number => {
-      if (typeof t === "number") return t;
-      if (typeof t === "string") {
-        const n = Number(t);
-        if (Number.isFinite(n)) return n;
-        const ms = new Date(t).getTime();
-        return Number.isFinite(ms) ? Math.floor(ms / 1000) : NaN;
-      }
-      // BusinessDay is only relevant for date-based charts. Convert it to
-      // midnight UTC so it can still participate in the interpolation below.
-      if (t && typeof t === "object" && "year" in (t as any)) {
-        const b = t as any;
-        return Math.floor(Date.UTC(b.year, (b.month ?? 1) - 1, b.day ?? 1) / 1000);
-      }
-      return NaN;
-    };
+      // Primary approach: logical coordinates (robust at any zoom level)
+      const visRange = chart.timeScale().getVisibleLogicalRange();
+      if (visRange !== null) {
+        let lastRealTime: number | null = null;
+        let lastRealLogical: number | null = null;
+        const searchFrom = Math.ceil(visRange.to as number);
 
-    // Fast path: exact timestamp exists in the current series.
-    const exactX = ts.timeToCoordinate(pt.time as Time);
-    if (exactX !== null && Number.isFinite(Number(exactX))) {
-      return { x: Number(exactX), y: Number(y) };
-    }
+        for (let li = searchFrom; li >= Math.max(0, searchFrom - 300); li--) {
+          const coord = chart.timeScale().logicalToCoordinate(li as Logical);
+          if (coord === null) continue;
+          const t = chart.timeScale().coordinateToTime(coord as number);
+          if (t !== null) { lastRealTime = toSec(t); lastRealLogical = li; break; }
+        }
 
-    // Build the current timeframe's real bar timeline. This is deliberately
-    // based on the series data, NOT on logical indexes from the previous
-    // timeframe. A 1m point at 10:07 can therefore be projected correctly
-    // between 15m bars at 10:00 and 10:15.
-    let rawBars: any[] = [];
-    try {
-      rawBars = (candle.data() as any[]) || [];
-    } catch {
-      rawBars = [];
-    }
-
-    const bars = rawBars
-      .map((b: any) => ({
-        time: toSec(b.time as Time),
-        originalTime: b.time as Time,
-      }))
-      .filter((b: any) => Number.isFinite(b.time))
-      .sort((a: any, b: any) => a.time - b.time);
-
-    // Remove duplicate timestamps defensively.
-    const uniqueBars: { time: number; originalTime: Time }[] = [];
-    for (const b of bars) {
-      const prev = uniqueBars[uniqueBars.length - 1];
-      if (!prev || prev.time !== b.time) uniqueBars.push(b);
-    }
-
-    if (uniqueBars.length >= 2) {
-      // Binary search for the first bar at/after targetTime.
-      let lo = 0;
-      let hi = uniqueBars.length - 1;
-      while (lo < hi) {
-        const mid = (lo + hi) >> 1;
-        if (uniqueBars[mid].time < targetTime) lo = mid + 1;
-        else hi = mid;
-      }
-
-      const rightIndex = lo;
-
-      // Exact timestamp may have been represented differently by the series.
-      if (uniqueBars[rightIndex].time === targetTime) {
-        const ex = ts.timeToCoordinate(
-          uniqueBars[rightIndex].originalTime as Time,
-        );
-        if (ex !== null && Number.isFinite(Number(ex))) {
-          return { x: Number(ex), y: Number(y) };
+        if (lastRealTime !== null && lastRealLogical !== null) {
+          let intervalSec = getIntervalSec(timeframe);
+          const prevCoord = chart.timeScale().logicalToCoordinate((lastRealLogical - 1) as Logical);
+          if (prevCoord !== null) {
+            const prevT = chart.timeScale().coordinateToTime(prevCoord as number);
+            if (prevT !== null) intervalSec = Math.max(60, lastRealTime - toSec(prevT));
+          }
+          if (intervalSec > 0) {
+            const logicalDelta = (pt.time - lastRealTime) / intervalSec;
+            const futureLogical = lastRealLogical + logicalDelta;
+            const extraX = chart.timeScale().logicalToCoordinate(futureLogical as Logical);
+            if (extraX !== null) return { x: extraX as number, y: y as number };
+          }
         }
       }
 
-      let leftIndex = rightIndex - 1;
-
-      // Target is before the first bar: extrapolate from first two bars.
-      if (rightIndex === 0) {
-        leftIndex = 0;
+      // Fallback: pixel scan with higher limit
+      const overlayW = overlayRef.current?.clientWidth ?? 1200;
+      const maxX = overlayW - 73;
+      let rx1 = maxX, rt1: Time | null = null;
+      for (let i = 0; i < 3000 && rt1 === null; i++, rx1--) {
+        rt1 = chart.timeScale().coordinateToTime(rx1);
       }
-
-      // Target is after the last bar: extrapolate from last two bars.
-      if (rightIndex >= uniqueBars.length) {
-        leftIndex = uniqueBars.length - 2;
+      if (rt1 === null) return null;
+      let rx2 = rx1 - 2, rt2: Time | null = null;
+      for (let i = 0; i < 200 && rt2 === null; i++, rx2--) {
+        rt2 = chart.timeScale().coordinateToTime(rx2);
       }
-
-      let a = uniqueBars[Math.max(0, leftIndex)];
-      let b = uniqueBars[Math.min(uniqueBars.length - 1, rightIndex)];
-
-      if (rightIndex >= uniqueBars.length) {
-        a = uniqueBars[uniqueBars.length - 2];
-        b = uniqueBars[uniqueBars.length - 1];
-      } else if (rightIndex === 0) {
-        a = uniqueBars[0];
-        b = uniqueBars[1];
-      }
-
-      const ax = ts.timeToCoordinate(a.originalTime as Time);
-      const bx = ts.timeToCoordinate(b.originalTime as Time);
-
-      if (
-        ax !== null &&
-        bx !== null &&
-        Number.isFinite(Number(ax)) &&
-        Number.isFinite(Number(bx)) &&
-        b.time !== a.time
-      ) {
-        const ratio = (targetTime - a.time) / (b.time - a.time);
-        const interpolatedX = Number(ax) + ratio * (Number(bx) - Number(ax));
-
-        if (Number.isFinite(interpolatedX)) {
-          return {
-            x: interpolatedX,
-            y: Number(y),
-          };
-        }
-      }
+      if (rt2 === null) return null;
+      const s1 = toSec(rt1), s2 = toSec(rt2);
+      const dx = rx1 - rx2;
+      if (dx === 0 || s1 === s2) return null;
+      return { x: rx1 + (pt.time - s1) * (dx / (s1 - s2)), y: y as number };
     }
 
-    // Last-resort fallback for charts whose series data is temporarily empty
-    // during a navigation/remount. Unlike the old implementation, this is only
-    // used when we have no usable bar timeline; it must NEVER reinterpret a
-    // historical missing timestamp as "future".
-    const logicalPos = ts.coordinateToLogical(
-      ts.timeToCoordinate(pt.time as Time) ?? 0,
-    );
-
-    if (logicalPos !== null) {
-      const logicalX = ts.logicalToCoordinate(
-        logicalPos as Logical,
-      );
-      if (logicalX !== null && Number.isFinite(Number(logicalX))) {
-        return { x: Number(logicalX), y: Number(y) };
-      }
-    }
-
-    return null;
+    if (x === null || y === null) return null;
+    return { x: x as number, y: y as number };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chart, candle, timeframe]);
+  }, [chart, candle, timeframe]); // renderTick removed — toPx calls LWC imperative API, always current
 
   // ── Keep canvas refs in sync (synchronous, no cost — just ref writes) ───────
   drawingsRef.current   = drawings;
@@ -3739,7 +3445,6 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     // Right-click always cancels in-progress drawing
     if (e.button === 2) {
       setPhase("idle"); setAnchor(null); setMousePoint(null); setIsDrawing(false);
-      channelSecondRef.current = null;
       clickPhaseRef.current = 0;
       return;
     }
@@ -3795,12 +3500,10 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     }
 
     // ── 2-point / 3-point tools: TradingView click-click interaction ───────
-    // Mobile uses the crosshair/tap path below. Keeping channel inside the
-    // desktop branch here would bypass the mobile crosshair for all 3 taps.
 
     // ── Mobile: crosshair-drag model — save anchor, do NOT place point yet ─
     // Point placement happens in onPointerUp only when the lift is a tap (<10px).
-    if (isMobile && pointsNeeded(activeTool) >= 2 && pointsNeeded(activeTool) <= 3 && !isFreehand(activeTool)) {
+    if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) {
       const overlay = overlayRef.current;
       if (!overlay) return;
       const cx = mobileDrawCrossPx.current?.x ?? (overlay.clientWidth  / 2);
@@ -3833,7 +3536,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     // Only update crosshair while an active drag is in progress.
     // When no drag is active (finger lifted), the crosshair stays at its last
     // position — it never follows raw finger coordinates.
-    if (isMobile && pointsNeeded(activeTool) >= 2 && pointsNeeded(activeTool) <= 3 && !isFreehand(activeTool)) {
+    if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) {
       const overlay = overlayRef.current;
       const drag    = mobileDrawDragAnchor.current;
       if (overlay && drag) {
@@ -3944,7 +3647,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     // ── MOBILE: tap-to-place at current crosshair position ────────────────
     // Drag (≥10px movement) = reposition crosshair only, no point placed.
     // Tap  (<10px movement) = place point at CROSSHAIR coords, not finger coords.
-    if (isMobile && pointsNeeded(activeTool) >= 2 && pointsNeeded(activeTool) <= 3 && !isFreehand(activeTool)) {
+    if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) {
       const start     = mobilePointerStart.current;
       mobileDrawDragAnchor.current = null;
       mobilePointerStart.current   = null;
@@ -3960,16 +3663,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       const pt   = fromPx(rect.left + crossPx.x, rect.top + crossPx.y);
       if (!pt) return;
 
-      if (activeTool === "channel") {
-        if (clickPhaseRef.current===0) { setAnchor(pt);setMousePoint(pt);setPhase("placed_first");setIsDrawing(true);clickPhaseRef.current=1; }
-        else if (clickPhaseRef.current===1) { channelSecondRef.current=pt;setMousePoint(pt);setPhase("placed_second");clickPhaseRef.current=2; }
-        else if (channelSecondRef.current) {
-          await saveDrawing([anchor!,channelSecondRef.current,pt]);
-          channelSecondRef.current=null;setAnchor(null);setMousePoint(null);setPhase("idle");setIsDrawing(false);clickPhaseRef.current=0;
-          mobileDrawDragAnchor.current=null; mobilePointerStart.current=null;
-          if(!useDrawingStore.getState().stayInDraw)setActiveTool("cursor");
-        }
-      } else if (clickPhaseRef.current === 0) {
+      if (clickPhaseRef.current === 0) {
         // First tap → place Point A
         setAnchor(pt);
         setMousePoint(pt);
@@ -4018,18 +3712,6 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       return;
     }
 
-    // Channel is committed in the desktop 3-click path below and in the mobile
-    // crosshair path above. Continue here only for the ordinary 2-point tools.
-    if (activeTool === "channel") {
-      if (clickPhaseRef.current !== 2 || !anchor || !channelSecondRef.current) return;
-      const p3 = snapToOHLC(e.clientX, e.clientY, e.shiftKey);
-      if (!p3) return;
-      await saveDrawing([anchor, channelSecondRef.current, p3]);
-      channelSecondRef.current = null; setAnchor(null); setMousePoint(null);
-      setPhase("idle"); setIsDrawing(false); clickPhaseRef.current = 0;
-      if (!useDrawingStore.getState().stayInDraw) setActiveTool("cursor");
-      return;
-    }
     if (clickPhaseRef.current !== 1) return;
 
     const pt = snapToOHLC(e.clientX, e.clientY, e.shiftKey);
@@ -4194,10 +3876,10 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   // so clientWidth already equals the drawable chart area — no further subtraction needed.
   const chartRight = W;
 
-  const previewPts = activeTool === "channel" && channelSecondRef.current && mousePoint ? [anchor!,channelSecondRef.current,mousePoint] : [anchor!,mousePoint!];
   const previewDrawing: Drawing | null =
-    (phase === "dragging" || phase === "placed_first" || phase === "placed_second") && anchor && mousePoint && activeTool !== "eraser" && pointsNeeded(activeTool) >= 2
-      ? { id:-1,symbol,timeframe,toolType:activeTool,points:previewPts as DrawingPoint[],style:activeStyle,isLocked:false,isVisible:true,createdAt:"" } : null;
+    (phase === "dragging" || phase === "placed_first") && anchor && mousePoint && activeTool !== "eraser" && pointsNeeded(activeTool) === 2
+      ? { id: -1, symbol, timeframe, toolType: activeTool, points: [anchor, mousePoint], style: activeStyle, isLocked: false, isVisible: true, createdAt: "" }
+      : null;
 
   const eraserActive = activeTool === "eraser";
   const cursorMode   = activeTool === "cursor";
@@ -4240,35 +3922,6 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   // Only re-run when the selected drawing's identity or points change, not on every renderTick
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDrawing?.id, selectedDrawing?.points, overlayRef.current?.clientWidth]);
-
-  const atrBands = atrTrendlineAlerts.map(alert => {
-    const matched = drawings.find(d => {
-      if (alert.drawingDisplayId && d.displayId) return alert.drawingDisplayId === d.displayId;
-      const sameSymbol = d.symbol ? d.symbol.toUpperCase() === symbol.toUpperCase() : true;
-      if (!sameSymbol || d.points.length < 2) return false;
-      const p1 = Math.abs(Number(d.points[0]?.price) - Number(alert.point1Price));
-      const p2 = Math.abs(Number(d.points[1]?.price) - Number(alert.point2Price));
-      const aT1 = Math.floor(new Date(alert.point1Time).getTime() / 1000);
-      const aT2 = Math.floor(new Date(alert.point2Time).getTime() / 1000);
-      const t1 = Math.abs(Number(d.points[0]?.time) - aT1);
-      const t2 = Math.abs(Number(d.points[1]?.time) - aT2);
-      return p1 < Math.max(Math.abs(alert.point1Price) * 1e-8, 1e-8) &&
-             p2 < Math.max(Math.abs(alert.point2Price) * 1e-8, 1e-8) &&
-             t1 <= 2 && t2 <= 2;
-    });
-    if (!matched) return null;
-    return (
-      <AtrProximityBand
-        key={`atr-band-${alert.id}`}
-        drawing={matched}
-        alert={alert}
-        toPx={toPx}
-        W={overlayRef.current?.clientWidth ?? 0}
-        candle={candle}
-        bars={candleBars}
-      />
-    );
-  });
 
   return (
     <div
@@ -4313,7 +3966,6 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
         }}
       />
       <svg width="100%" height="100%" style={{ overflow: "hidden", display: "block", willChange: "transform", transform: "translate3d(0,0,0)", touchAction: "none", position: "relative" }}>
-        {atrBands}
         <defs>
           <clipPath id="drawing-clip">
             {/* Inset 4px on the left so endpoint circles (r≤3.5) never form a

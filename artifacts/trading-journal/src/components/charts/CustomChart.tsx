@@ -1441,7 +1441,7 @@ const CustomChart = memo(function CustomChart({
         // time-axis pan while our engine is in CROSSHAIR mode (below threshold, no
         // stopPropagation) — LWC and our engine both pan concurrently causing jitter.
         // time: false → our gesture engine owns all horizontal pan exclusively.
-        // price: true kept → native mouse drag on price scale still zooms it.
+        // price: false → native LWC price-axis drag is disabled; dedicated PriceScaleTouchHandler owns Y-scaling.
         axisPressedMouseMove: { time: false, price: false },
         axisDoubleClickReset: { time: true, price: true },
       },
@@ -1793,12 +1793,11 @@ const CustomChart = memo(function CustomChart({
 
       const rect = container.getBoundingClientRect();
 
-      // ── Price-scale zone (mouse only): let LWC handle natively ───────────
+      // ── Price-scale zone (mouse only): dedicated handler owns the scale ─────
       // The price scale strip is the rightmost ~72px (matches DrawingOverlay's
       // right:72 cutout and PriceScaleTouchHandler's touch zone).
-      // For mouse, axisPressedMouseMove.price:true gives LWC native drag-to-zoom.
-      // We must NOT set `ig` here or our stopPropagation in CHART_PAN will swallow
-      // every subsequent pointermove and kill the LWC price-scale handler.
+      // LWC axisPressedMouseMove.price is disabled. PriceScaleTouchHandler owns
+      // the price-scale gesture, so keep `ig` null and do not compete with it.
       if (e.pointerType === 'mouse' && rect.right - e.clientX <= 72) {
         e.preventDefault(); // block text-selection but keep ig=null so LWC owns it
         return;
@@ -2248,7 +2247,7 @@ const CustomChart = memo(function CustomChart({
 
       // ── Vertical pan (mouse + touch) ─────────────────────────────────────
       // Mouse: 360° drag works in chart area. Price-scale zone is excluded in
-      // onDown so LWC handles axisPressedMouseMove.price there natively.
+      // onDown because PriceScaleTouchHandler owns that gesture exclusively.
       if (dy === 0) return;
 
       // Lazy price-range snapshot on the first vertical pan frame.
