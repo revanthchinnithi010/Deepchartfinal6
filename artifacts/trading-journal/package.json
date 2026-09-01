@@ -52,7 +52,7 @@
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "catalog:",
-    "input-otp": "^1.4.0",
+    "input-otp": "^1.4.2",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-day-picker": "^9.11.1",
