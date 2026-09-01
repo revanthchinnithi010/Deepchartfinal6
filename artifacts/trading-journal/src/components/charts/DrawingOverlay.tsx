@@ -2993,7 +2993,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
         // kineticScroll is a TOP-LEVEL option in LWC v5, not nested inside handleScroll.
         handleScroll:  { mouseWheel: false, pressedMouseMove: false, horzTouchDrag: false, vertTouchDrag: false },
         kineticScroll: { mouse: false, touch: true },
-        handleScale:   { mouseWheel: true, pinch: true, axisPressedMouseMove: { price: true, time: false }, axisDoubleClickReset: { price: true, time: true } },
+        handleScale:   { mouseWheel: true, pinch: true, axisPressedMouseMove: { price: false, time: false }, axisDoubleClickReset: { price: true, time: true } },
       });
     }
   }, [chart, activeTool]);
