@@ -26,7 +26,45 @@ if (s.includes(oldStyle)) {
 }
 
 const effectMarker = `  // ── event handlers ────────────────────────────────────────────────────────\n`;
-const effectBlock = `  // Keep the gesture overlay aligned to the exact MAIN LWC pane and the exact\n  // left edge of the rendered price-scale cell. The white axis boundary is the\n  // hard interaction boundary: everything left of it remains chart/panel space.\n  // The rAF loop is intentional because pane heights and layout can change while\n  // the user drags a panel divider or rotates the device.\n  useEffect(() => {\n    const container = containerRef.current;\n    const handler = handlerRef.current;\n    if (!container || !handler) return;\n\n    let raf = 0;\n    const syncHitbox = () => {\n      const containerRect = container.getBoundingClientRect();\n      const scaleCell = container.querySelector('table tr:first-child td:last-child') as HTMLElement | null;\n\n      let left = container.clientWidth - (touchW || 75);\n      if (scaleCell) {\n        const scaleRect = scaleCell.getBoundingClientRect();\n        const measuredLeft = scaleRect.left - containerRect.left;\n        if (Number.isFinite(measuredLeft)) left = Math.max(0, Math.min(container.clientWidth, measuredLeft));\n      }\n\n      let h = 0;\n      try {\n        const panes = chartRef.current?.panes?.();\n        h = panes?.[0]?.getHeight?.() ?? 0;\n      } catch { /* chart may be disposing */ }\n      if (!(h > 0)) h = Math.max(0, container.clientHeight - 35);\n\n      handler.style.setProperty("--price-scale-left", `${left}px`);\n      handler.style.setProperty("--price-scale-main-height", `${Math.max(0, h)}px`);\n      raf = requestAnimationFrame(syncHitbox);\n    };\n\n    syncHitbox();\n    return () => cancelAnimationFrame(raf);\n  }, [chartRef, containerRef, touchW]);\n\n`;
+const effectBlock = `  // Keep the gesture overlay aligned to the exact MAIN LWC pane and the exact
+  // left edge of the rendered price-scale cell. The white axis boundary is the
+  // hard interaction boundary: everything left of it remains chart/panel space.
+  // The rAF loop is intentional because pane heights and layout can change while
+  // the user drags a panel divider or rotates the device.
+  useEffect(() => {
+    const container = containerRef.current;
+    const handler = handlerRef.current;
+    if (!container || !handler) return;
+
+    let raf = 0;
+    const syncHitbox = () => {
+      const containerRect = container.getBoundingClientRect();
+      const scaleCell = container.querySelector('table tr:first-child td:last-child') as HTMLElement | null;
+
+      let left = container.clientWidth - (touchW || 75);
+      if (scaleCell) {
+        const scaleRect = scaleCell.getBoundingClientRect();
+        const measuredLeft = scaleRect.left - containerRect.left;
+        if (Number.isFinite(measuredLeft)) left = Math.max(0, Math.min(container.clientWidth, measuredLeft));
+      }
+
+      let h = 0;
+      try {
+        const panes = chartRef.current?.panes?.();
+        h = panes?.[0]?.getHeight?.() ?? 0;
+      } catch { /* chart may be disposing */ }
+      if (!(h > 0)) h = Math.max(0, container.clientHeight - 35);
+
+      handler.style.setProperty("--price-scale-left", String(left) + "px");
+      handler.style.setProperty("--price-scale-main-height", String(Math.max(0, h)) + "px");
+      raf = requestAnimationFrame(syncHitbox);
+    };
+
+    syncHitbox();
+    return () => cancelAnimationFrame(raf);
+  }, [chartRef, containerRef, touchW]);
+
+`;
 
 // Add the exact-boundary effect independently of the older height-only effect.
 // This is deliberately keyed to --price-scale-left so it remains idempotent on
