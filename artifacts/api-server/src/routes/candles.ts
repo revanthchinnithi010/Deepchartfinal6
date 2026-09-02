@@ -12,7 +12,11 @@ import { pool } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 
 const VALID_INTERVALS = new Set(["1", "3", "5", "15", "30", "60", "120", "240", "D", "W"]);
-const CTRADER_SYMBOLS = new Set(["NAS100","US30","US500","SPX500","GER40","DE40","UK100","JP225","XAUUSD","XAGUSD","USOIL","UKOIL","NATGAS","EURUSD","GBPUSD","GBPJPY","USDJPY","AUDUSD","USDCAD","USDCHF","EURGBP","EURJPY","EURAUD","GBPAUD","NZDUSD"]);
+// cTrader is the historical OHLC source for broker/CFD instruments that are not
+// covered by Delta's crypto-only history endpoint. XPTUSD was missing here, so
+// its chart fell through to Delta, returned no history, and displayed only the
+// live aggregated candle. Keep XPTUSD explicitly on the cTrader history path.
+const CTRADER_SYMBOLS = new Set(["NAS100","US30","US500","SPX500","GER40","DE40","UK100","JP225","XAUUSD","XAGUSD","XPTUSD","USOIL","UKOIL","NATGAS","EURUSD","GBPUSD","GBPJPY","USDJPY","AUDUSD","USDCAD","USDCHF","EURGBP","EURJPY","EURAUD","GBPAUD","NZDUSD"]);
 const INTERVAL_LABEL: Partial<Record<string, string>> = { "1":"1m","3":"3m","5":"5m","15":"15m","30":"30m","60":"1H","120":"2H","240":"4H","D":"Daily","W":"Weekly" };
 
 function normalizeBybitSymbol(symbol: string): string {
@@ -88,7 +92,7 @@ export function createCandlesRouter(aggregator: CandleAggregator, _marketData: M
 
   router.get("/candles/ctrader/diagnostic/:symbol/:interval", async (req,res):Promise<void>=>{
     const symbol=(req.params["symbol"]??"").toUpperCase().trim(); const interval=req.params["interval"]??""; const engineStatus=ctraderTickEngine.getStatus(); const engineCreds=ctraderTickEngine.getEngineCredentials(); const symRow=await lookupSymbolId(symbol).catch(()=>null); const aggBars=aggregator.getBars(symbol,interval as CandleInterval);
-    const diag:Record<string,unknown>={symbol,interval,timeframeLabel:INTERVAL_LABEL[interval]??interval,isCtraderSymbol:CTRADER_SYMBOLS.has(symbol),isBybitCrypto:isBybitCryptoSymbol(symbol),engineStatus:engineStatus.status,engineAccountId:engineStatus.accountId,engineIsLive:engineStatus.isLive,engineSubscribedSymbols:engineStatus.subscribedSymbols,engineHasCreds:!!engineCreds,symbolId:symRow?.symbolId??null,symbolIdFound:!!symRow,aggregatorBars:aggBars.length,cacheKey:`${symbol}:${interval}`,cached:trendbarsCache.has(`${symbol}:${interval}`)};
+    const diag:Record<string,unknown>={symbol,interval,timeframeLabel:INTERVAL_LABEL[interval]??interval,isCtraderSymbol:CTRADER_SYMBOLS.has(symbol),isBybitCrypto:isBybitCryptoSymbol(symbol),engineStatus:engineStatus.status,engineAccountId:engineStatus.accountId,engineIsLive:engineStatus.isLive,engineSubscribedSymbols:engineStatus.subscribedSymbols,engineHasCreds:!!engineCreds,symbolId:symRow?.symbolId??null,symbolIdFound:!!symRow,aggregatorBars:aggBars.length,cacheKey:`${symbol}:${interval}`,cached:trendbarsCacheCache.has(`${symbol}:${interval}`)};
     if(isBybitCryptoSymbol(symbol)){try{const t0=Date.now();const bars=await fetchBybitCandles(symbol,interval,5);diag["testFetch"]={ok:true,provider:"bybit",bars:bars.length,durationMs:Date.now()-t0};}catch(e){diag["testFetch"]={ok:false,provider:"bybit",error:String(e)};}}
     res.json(diag);
   });
